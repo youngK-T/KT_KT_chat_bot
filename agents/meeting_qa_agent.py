@@ -28,6 +28,25 @@ class MeetingQAAgent:
         
         # Agent 그래프 구성
         self.graph = self._build_graph()
+
+    def should_improve_answer(self, state: MeetingQAState) -> str:
+        """답변 개선 여부 결정"""
+        quality_score = state.get("answer_quality_score", 5)
+        attempt_count = state.get("improvement_attempts", 0)
+        
+        print(f"🔍 개선 여부 결정: 점수={quality_score}, 시도={attempt_count}")
+        
+        # 이미 개선을 시도했다면 더 이상 개선하지 않음
+        if attempt_count >= 1:
+            print("   → 이미 1회 개선 시도 완료, 종료")
+            return "finish"
+        
+        if quality_score <= 3:
+            print("   → 품질 낮음, 개선 진행")
+            return "improve"
+        else:
+            print("   → 품질 양호, 종료")
+            return "finish"
     
     def _build_graph(self) -> StateGraph:
         """Agent 그래프 구성"""
@@ -41,6 +60,8 @@ class MeetingQAAgent:
         builder.add_node("process_scripts", self.process_original_scripts)
         builder.add_node("select_chunks", self.select_relevant_chunks)
         builder.add_node("generate_answer", self.generate_final_answer)
+        builder.add_node("evaluate_answer", self.evaluate_answer_quality)
+        builder.add_node("improve_answer", self.improve_answer)
         
         # 엣지 연결
         builder.set_entry_point("process_question")
@@ -50,9 +71,98 @@ class MeetingQAAgent:
         builder.add_edge("fetch_scripts", "process_scripts")
         builder.add_edge("process_scripts", "select_chunks")
         builder.add_edge("select_chunks", "generate_answer")
-        builder.add_edge("generate_answer", END)
+        builder.add_edge("generate_answer", "evaluate_answer")
+        
+        # 조건부 엣지
+        builder.add_conditional_edges(
+            "evaluate_answer",
+            self.should_improve_answer,
+            {
+                "improve": "improve_answer",
+                "finish": END
+            }
+        )
+        builder.add_edge("improve_answer", "evaluate_answer")
         
         return builder.compile()
+
+    def summarize_conversation_history(self, state: MeetingQAState) -> MeetingQAState:
+        """이전 대화 요약 생성"""
+        try:
+            current_question = state.get("user_question", "")
+            previous_memory = state.get("conversation_memory", "")
+            conversation_count = state.get("conversation_count", 0)
+            
+            if conversation_count == 0:
+                # 첫 번째 대화
+                return {
+                    **state,
+                    "conversation_memory": "",
+                    "conversation_count": 1
+                }
+            
+            # 이전 대화와 현재 질문을 요약
+            summary_prompt = f"""
+            이전 대화 요약: {previous_memory}
+            현재 질문: {current_question}
+            
+            위 정보를 바탕으로 대화의 맥락을 간단히 요약해주세요.
+            중요한 키워드와 주제만 포함하여 2-3문장으로 요약해주세요.
+            """
+            
+            response = self.llm.invoke(summary_prompt)
+            new_memory = response.content.strip()
+            
+            return {
+                **state,
+                "conversation_memory": new_memory,
+                "conversation_count": conversation_count + 1
+            }
+            
+        except Exception as e:
+            logger.error(f"대화 요약 실패: {str(e)}")
+            return {
+                **state,
+                "conversation_memory": state.get("conversation_memory", ""),
+                "conversation_count": state.get("conversation_count", 0) + 1
+                }
+
+    def enhance_question_with_memory(self, state: MeetingQAState) -> MeetingQAState:
+        """메모리를 활용하여 질문 보강"""
+        try:
+            original_question = state.get("user_question", "")
+            memory = state.get("conversation_memory", "")
+            
+            if not memory:
+                # 메모리가 없으면 원본 질문 그대로 사용
+                return {
+                    **state,
+                    "processed_question": original_question
+                }
+            
+            # 메모리를 활용하여 질문 보강
+            enhanced_prompt = f"""
+            이전 대화 맥락: {memory}
+            현재 질문: {original_question}
+            
+            위 맥락을 고려하여 현재 질문을 더 명확하고 구체적으로 만들어주세요.
+            이전 대화와의 연관성을 유지하면서 질문을 개선해주세요.
+            """
+            
+            response = self.llm.invoke(enhanced_prompt)
+            enhanced_question = response.content.strip()
+            
+            return {
+                **state,
+                "processed_question": enhanced_question
+            }
+            
+        except Exception as e:
+            logger.error(f"질문 보강 실패: {str(e)}")
+            return {
+                **state,
+                "processed_question": state.get("user_question", "")
+            }
     
     async def run(self, initial_state: MeetingQAState) -> MeetingQAState:
         """Agent 실행"""
@@ -67,6 +177,116 @@ class MeetingQAAgent:
                 **initial_state,
                 "error_message": f"Agent 실행 실패: {str(e)}",
                 "current_step": "failed"
+            }
+
+    def evaluate_answer_quality(self, state: MeetingQAState) -> MeetingQAState:
+        """답변 품질 평가"""
+        try:
+            question = state.get("processed_question", "")
+            answer = state.get("final_answer", "")
+            context_chunks = state.get("context_chunks", [])
+            
+            if not answer:
+                return {
+                    **state,
+                    "answer_quality_score": 1,
+                    "current_step": "quality_evaluated"
+                }
+            
+            # LLM을 사용한 품질 평가
+            evaluation_prompt = f"""
+            다음 답변의 품질을 1-5점으로 평가해주세요.
+            
+            질문: {question}
+            답변: {answer}
+            
+            평가 기준:
+            1점: 전혀 관련 없는 답변
+            2점: 관련은 있지만 부정확한 답변
+            3점: 부분적으로 정확한 답변
+            4점: 대부분 정확하고 유용한 답변
+            5점: 완벽하고 매우 유용한 답변
+            
+            점수만 숫자로 답변해주세요 (예: 4)
+            """
+            
+            response = self.llm.invoke(evaluation_prompt)
+            quality_score = int(response.content.strip())
+            
+            improvement_attempts = state.get("improvement_attempts", 0) + 1
+            
+            return {
+                **state,
+                "answer_quality_score": quality_score,
+                "improvement_attempts": improvement_attempts,
+                "current_step": "quality_evaluated"
+            }
+            
+        except Exception as e:
+            logger.error(f"답변 품질 평가 실패: {str(e)}")
+            return {
+                **state,
+                "answer_quality_score": 3,  # 기본값
+                "improvement_attempts": 0,
+                "current_step": "quality_evaluation_failed"
+            }
+
+    def improve_answer(self, state: MeetingQAState) -> MeetingQAState:
+        """답변 개선"""
+        try:
+            question = state.get("processed_question", "")
+            current_answer = state.get("final_answer", "")
+            context_chunks = state.get("context_chunks", [])
+            quality_score = state.get("answer_quality_score", 3)
+            improvement_attempts = state.get("improvement_attempts", 0)
+            
+            # 개선 시도 횟수 증가
+            improvement_attempts += 1
+            
+            # 컨텍스트 재구성
+            context_parts = []
+            for chunk in context_chunks:
+                if "summary_text" in chunk:
+                    context_parts.append(f"[요약본] {chunk.get('summary_text', '')}")
+                else:
+                    context_parts.append(f"[원본] {chunk.get('chunk_text', '')}")
+            
+            context = "\n\n".join(context_parts)
+            
+            # 개선된 답변 생성
+            improvement_prompt = f"""
+            이전 답변의 품질이 낮았습니다 (점수: {quality_score}/5).
+            더 정확하고 유용한 답변으로 개선해주세요.
+            
+            질문: {question}
+            이전 답변: {current_answer}
+            
+            참고 자료:
+            {context}
+            
+            개선된 답변을 생성해주세요:
+            1. 더 구체적이고 정확한 정보 제공
+            2. 출처 명시
+            3. 사용자에게 도움이 되는 내용
+            4. 한국어로 명확하게 작성
+            """
+            
+            response = self.llm.invoke(improvement_prompt)
+            improved_answer = response.content.strip()
+            
+            return {
+                **state,
+                "final_answer": improved_answer,
+                "improvement_attempts": improvement_attempts,
+                "current_step": "answer_improved"
+            }
+            
+        except Exception as e:
+            logger.error(f"답변 개선 실패: {str(e)}")
+            return {
+                **state,
+                "improvement_attempts": improvement_attempts + 1,
+                "current_step": "answer_improvement_failed"
             }
     
     def process_question(self, state: MeetingQAState) -> MeetingQAState:

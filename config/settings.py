@@ -3,7 +3,7 @@ from pathlib import Path
 
 def load_api_keys(filepath="api_key.txt"):
     """API 키 파일에서 환경변수 로드"""
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:  # encoding 추가
         for line in f:
             line = line.strip()
             if line and "=" in line:
@@ -25,6 +25,13 @@ AZURE_OPENAI_CONFIG = {
     "api_version": os.environ.get("AZURE_OPENAI_API_VERSION"),
     "deployment_name": os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME")
 }
+
+# Azure OpenAI 임베딩 설정
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT = os.environ.get("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-ada-002")
+
+# 외부 서비스 URL 설정
+RAG_SERVICE_URL = os.environ.get("RAG_SERVICE_URL", "http://report-source-e7haeydbc7fngjdy.koreacentral-01.azurewebsites.net")
+MEETING_API_URL = os.environ.get("MEETING_API_URL", "http://scriptcreateservice06-a6buhjcfbnfbcuhz.koreacentral-01.azurewebsites.net")
 
 # API 설정
 API_HOST = "0.0.0.0"

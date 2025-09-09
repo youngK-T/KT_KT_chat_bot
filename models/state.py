@@ -45,3 +45,11 @@ class MeetingQAState(TypedDict):
     # 시스템 상태
     current_step: str  # 현재 처리 단계
     error_message: str  # 오류 메시지
+
+    # 대화 메모리 관리
+    conversation_memory: str  # 이전 대화 요약
+    conversation_count: int   # 대화 횟수
+    
+     # 답변 품질 관리
+    answer_quality_score: int  # 1-5점 품질 점수
+    improvement_attempts: int  # 개선 시도 횟수
