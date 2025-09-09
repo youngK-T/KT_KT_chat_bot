@@ -6,12 +6,11 @@ from typing import Literal
 
 from models.state import MeetingQAState
 from services.rag_client import RAGClient
-from services.postgres_client import PostgreSQLClient
-from services.blob_client import AzureBlobClient
 from utils.text_processing import chunk_text, clean_text
 from utils.embeddings import EmbeddingManager, find_most_relevant_chunks
-from config.settings import AZURE_OPENAI_CONFIG, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
+from config.settings import AZURE_OPENAI_CONFIG, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP, RAG_SERVICE_URL, MEETING_API_URL
 import logging
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,6 @@ class MeetingQAAgent:
             api_key=AZURE_OPENAI_CONFIG["api_key"]
         )
         self.embedding_manager = EmbeddingManager()
-        self.blob_client = AzureBlobClient()
         
         # Agent 그래프 구성
         self.graph = self._build_graph()
@@ -171,19 +169,27 @@ class MeetingQAAgent:
             }
     
     def fetch_meeting_metadata(self, state: MeetingQAState) -> MeetingQAState:
-        """3단계: PostgreSQL에서 회의 메타데이터 조회"""
+        """3단계: 외부 회의록 API에서 메타데이터 조회"""
         try:
             selected_meeting_ids = state.get("selected_meeting_ids", [])
-            postgresql_config = state.get("postgresql_config", {})
             
             if not selected_meeting_ids:
                 raise ValueError("선택된 회의 ID가 없습니다.")
             
-            if not postgresql_config:
-                raise ValueError("PostgreSQL 설정이 없습니다.")
-            
-            with PostgreSQLClient(postgresql_config) as pg_client:
-                meeting_metadata = pg_client.fetch_meeting_metadata(selected_meeting_ids)
+            # 외부 API 호출: GET /api/scripts
+            with httpx.Client(timeout=30) as client:
+                response = client.get(f"{MEETING_API_URL}/api/scripts")
+                
+                if response.status_code != 200:
+                    raise Exception(f"API 호출 실패: {response.status_code}")
+                
+                all_meetings = response.json()
+                
+                # 선택된 회의 ID로 필터링
+                meeting_metadata = [
+                    meeting for meeting in all_meetings 
+                    if meeting.get("id") in selected_meeting_ids or meeting.get("meeting_id") in selected_meeting_ids
+                ]
             
             logger.info(f"메타데이터 조회 완료: {len(meeting_metadata)}개 회의 정보")
             
@@ -202,14 +208,38 @@ class MeetingQAAgent:
             }
     
     def fetch_original_scripts(self, state: MeetingQAState) -> MeetingQAState:
-        """4단계: Azure Blob Storage에서 원본 스크립트 다운로드"""
+        """4단계: 외부 회의록 API에서 원본 스크립트 다운로드"""
         try:
             meeting_metadata = state.get("meeting_metadata", [])
             
             if not meeting_metadata:
                 raise ValueError("회의 메타데이터가 없습니다.")
             
-            original_scripts = self.blob_client.download_text_files(meeting_metadata)
+            original_scripts = []
+            
+            # 각 회의에 대해 스크립트 내용 다운로드
+            with httpx.Client(timeout=30) as client:
+                for meeting in meeting_metadata:
+                    meeting_id = meeting.get("id") or meeting.get("meeting_id")
+                    
+                    if not meeting_id:
+                        logger.warning(f"회의 ID가 없습니다: {meeting}")
+                        continue
+                    
+                    # 외부 API 호출: GET /api/scripts/{id}
+                    response = client.get(f"{MEETING_API_URL}/api/scripts/{meeting_id}")
+                    
+                    if response.status_code == 200:
+                        script_content = response.text
+                        
+                        original_scripts.append({
+                            "meeting_id": meeting_id,
+                            "content": script_content,
+                            "filename": f"meeting_{meeting_id}.txt",
+                            "meeting_metadata": meeting
+                        })
+                    else:
+                        logger.warning(f"스크립트 다운로드 실패: {meeting_id}, 상태코드: {response.status_code}")
             
             logger.info(f"원본 스크립트 다운로드 완료: {len(original_scripts)}개 파일")
             
