@@ -26,8 +26,9 @@ jobs:
       - name: Set immutable tag
         id: vars
         run: |
-          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "TAG=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          VERSION=$(echo "${{ github.event.head_commit.message }}" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          if [ -n "$VERSION" ]; then
+            echo "TAG=$VERSION" >> $GITHUB_OUTPUT
           else
             echo "TAG=dev-${{ github.run_number }}" >> $GITHUB_OUTPUT
           fi
