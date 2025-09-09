@@ -5,8 +5,20 @@
 ## 🏗️ 아키텍처
 
 ```
-사용자 질문 → RAG 검색 → PostgreSQL → Azure Blob → 답변 생성
-             (요약본)      (메타데이터)   (원본 텍스트)
+graph TD
+    A[사용자 질문] --> B[질문 전처리]
+    B --> C[키워드 추출]
+    C --> D[RAG 검색]
+    D --> E[회의 ID 선별]
+    E --> F[메타데이터 조회]
+    F --> G[원본 스크립트 다운로드]
+    G --> H[텍스트 청킹]
+    H --> I[임베딩 생성]
+    I --> J[유사도 계산]
+    J --> K[관련 청크 선별]
+    K --> L[컨텍스트 조합]
+    L --> M[LLM 답변 생성]
+    M --> N[최종 응답]
 ```
 
 ## 📁 프로젝트 구조
@@ -52,6 +64,10 @@ AZURE_OPENAI_API_KEY=your_api_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
+
+# 외부 서비스 URL 설정
+RAG_SERVICE_URL=https://your-rag-service.azurecontainerapps.io
+MEETING_API_URL=https://your-meeting-api.azurecontainerapps.io
 ```
 
 ### 3. 서버 실행
@@ -72,17 +88,11 @@ POST /api/v1/meeting-qa
 Content-Type: application/json
 
 {
-    "question": "지난 주 회의에서 결정된 마케팅 전략은?",
-    "rag_service_url": "http://rag-service:8080",
-    "postgresql_config": {
-        "host": "localhost",
-        "database": "meeting_db",
-        "user": "postgres",
-        "password": "password",
-        "port": 5432
-    }
+    "question": "지난 주 회의에서 결정된 마케팅 전략은?"
 }
 ```
+
+> **참고**: 외부 서비스 URL들은 `config/api_key.txt`에서 환경변수로 관리됩니다.
 
 ### 응답 예시
 ```json
@@ -109,52 +119,51 @@ Content-Type: application/json
 }
 ```
 
-## 🔧 Agent 처리 흐름
-
-1. **질문 전처리**: 검색 최적화된 형태로 변환, 키워드 추출
-2. **RAG 검색**: 외부 RAG 서비스에서 관련 요약본 검색
-3. **메타데이터 조회**: PostgreSQL에서 Blob Storage 정보 획득
-4. **원본 다운로드**: Azure Blob Storage에서 원본 텍스트 다운로드
-5. **텍스트 처리**: 청킹, 임베딩 생성
-6. **관련 청크 선별**: 질문과 유사도 높은 청크 선택
 7. **답변 생성**: LLM을 통한 최종 답변 생성
 
-## 🧪 테스트
+### 📊 데이터 흐름 다이어그램
 
-### Gradio 테스트 UI
-```bash
-python test_ui.py
+```mermaid
+graph TD
+    A[👤 사용자 질문] --> B[🔄 질문 전처리]
+    B --> C[🔑 키워드 추출]
+    C --> D[🔍 RAG 검색]
+    D --> E[📋 회의 ID 선별]
+    E --> F[📊 메타데이터 조회]
+    F --> G[📄 원본 스크립트 다운로드]
+    G --> H[✂️ 텍스트 청킹]
+    H --> I[🎯 임베딩 생성]
+    I --> J[📏 유사도 계산]
+    J --> K[🎯 관련 청크 선별]
+    K --> L[📝 컨텍스트 조합]
+    L --> M[🤖 LLM 답변 생성]
+    M --> N[✅ 최종 응답]
+    
+    style A fill:#e1f5fe
+    style N fill:#c8e6c9
+    style M fill:#fff3e0
 ```
 
-### 개발 환경 실행
-```bash
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-```
+### 🔧 기술 스택
 
-## 🔧 환경 설정
+#### **AI 모델 (Azure OpenAI)**
+- **GPT-4o-mini**: 질문 전처리, 답변 생성
+- **text-embedding-ada-002**: 벡터 임베딩
 
-### PostgreSQL 테이블 구조
-```sql
-CREATE TABLE meeting_files (
-    meeting_id VARCHAR(50) PRIMARY KEY,
-    meeting_title VARCHAR(200),
-    meeting_date DATE,
-    blob_url TEXT,
-    blob_key TEXT,
-    file_size BIGINT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-```
+#### **외부 서비스**
+- **RAG 서비스**: 요약본 검색
+- **회의록 API**: 메타데이터/원본 텍스트 조회
 
-### 외부 서비스 요구사항
-- **RAG 서비스**: `/search` 엔드포인트 필요
-- **PostgreSQL**: 회의 메타데이터 저장
-- **Azure Blob Storage**: 원본 회의록 텍스트 파일
+#### **처리 기술**
+- **청킹**: 긴 텍스트를 1000자 단위로 분할 (200자 오버랩)
+- **임베딩**: 텍스트를 1536차원 벡터로 변환
+- **코사인 유사도**: 질문과 청크 간 관련성 계산 (임계값: 0.6)
 
-## 📝 개발 노트
+### 💡 핵심 아키텍처 특징
 
-- MSA 환경을 위한 분산 아키텍처
-- Azure OpenAI 기반 임베딩 및 답변 생성
-- 비동기 처리 지원
-- 확장 가능한 모듈 구조
+1. **🔄 다단계 검색**: RAG → 메타데이터 → 원본 스크립트
+2. **🎯 의미 검색**: 임베딩으로 관련 부분만 추출
+3. **⚡ 컨텍스트 최적화**: 토큰 제한 내에서 최대한 관련 정보 활용
+4. **📊 상태 관리**: LangGraph로 각 단계 결과 추적
+5. **🏗️ MSA 구조**: 독립적인 마이크로서비스들과 HTTP 통신
+

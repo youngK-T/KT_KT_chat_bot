@@ -22,7 +22,7 @@ def get_agent() -> MeetingQAAgent:
         _agent_instance = MeetingQAAgent()
     return _agent_instance
 
-@router.post("/meeting-qa", response_model=MeetingQAResponse)
+@router.post("/query", response_model=MeetingQAResponse)
 async def process_meeting_question(
     request: MeetingQARequest,
     agent: MeetingQAAgent = Depends(get_agent)
@@ -46,8 +46,6 @@ async def process_meeting_question(
             "final_answer": "",
             "sources": [],
             "confidence_score": 0.0,
-            "rag_service_url": request.rag_service_url,
-            "meeting_api_url": request.meeting_api_url,
             "current_step": "initialized",
             "error_message": ""
         }
@@ -66,8 +64,8 @@ async def process_meeting_question(
         processing_steps = [
             "질문 전처리 완료",
             f"RAG 검색 완료: {len(final_state.get('relevant_summaries', []))}개 관련 요약본 발견",
-            f"DB 조회 완료: {len(final_state.get('meeting_metadata', []))}개 회의 메타데이터 획득",
-            f"스토리지 조회 완료: {len(final_state.get('original_scripts', []))}개 원본 스크립트 다운로드",
+            f"회의록 API 메타데이터 조회 완료: {len(final_state.get('meeting_metadata', []))}개 회의 정보 획득",
+            f"회의록 API 스크립트 다운로드 완료: {len(final_state.get('original_scripts', []))}개 원본 스크립트 획득",
             f"청킹 및 임베딩 완료: {len(final_state.get('chunked_scripts', []))}개 청크 생성",
             f"관련 청크 선별 완료: {len(final_state.get('relevant_chunks', []))}개 청크 선택",
             "최종 답변 생성 완료"

@@ -35,7 +35,7 @@ app.add_middleware(
 )
 
 # 라우터 포함
-app.include_router(router, prefix="/api/v1", tags=["Meeting QA"])
+app.include_router(router, prefix="/api/chat", tags=["Meeting QA"])
 
 @app.get("/")
 async def root():
@@ -44,7 +44,7 @@ async def root():
         "message": "Meeting QA API",
         "version": API_VERSION,
         "docs": "/docs",
-        "health": "/api/v1/health"
+        "health": "/api/chat/health"
     }
 
 if __name__ == "__main__":

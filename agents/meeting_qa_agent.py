@@ -3,14 +3,14 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain.output_parsers import CommaSeparatedListOutputParser
 from langgraph.graph import StateGraph, END
 from typing import Literal
+import asyncio
 
 from models.state import MeetingQAState
 from services.rag_client import RAGClient
-from services.postgres_client import PostgreSQLClient
-from services.blob_client import AzureBlobClient
+from services.meeting_api_client import MeetingAPIClient
 from utils.text_processing import chunk_text, clean_text
 from utils.embeddings import EmbeddingManager, find_most_relevant_chunks
-from config.settings import AZURE_OPENAI_CONFIG, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP
+from config.settings import AZURE_OPENAI_CONFIG, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP, RAG_SERVICE_URL, MEETING_API_URL
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,10 +26,27 @@ class MeetingQAAgent:
             api_key=AZURE_OPENAI_CONFIG["api_key"]
         )
         self.embedding_manager = EmbeddingManager()
-        self.blob_client = AzureBlobClient()
         
         # Agent 그래프 구성
         self.graph = self._build_graph()
+    
+    def should_improve_answer(self, state: MeetingQAState) -> str:
+        """답변 품질에 따라 개선 여부 결정"""
+        quality_score = state.get("answer_quality_score", 0)
+        attempt_count = state.get("improvement_attempts", 0)
+        
+        # 최대 2번까지만 개선 시도
+        if attempt_count >= 2:
+            logger.info("최대 개선 횟수 도달 - 현재 답변으로 종료")
+            return "finish"
+        
+        # 품질 점수 3 이하면 개선
+        if quality_score <= 3:
+            logger.info(f"답변 품질 낮음 (점수: {quality_score}) - 개선 진행")
+            return "improve"
+        else:
+            logger.info(f"답변 품질 양호 (점수: {quality_score}) - 완료")
+            return "finish"
     
     def _build_graph(self) -> StateGraph:
         """Agent 그래프 구성"""
@@ -43,16 +60,34 @@ class MeetingQAAgent:
         builder.add_node("process_scripts", self.process_original_scripts)
         builder.add_node("select_chunks", self.select_relevant_chunks)
         builder.add_node("generate_answer", self.generate_final_answer)
-        
+        # 품질 평가 & 개선 노드 추가
+        builder.add_node("evaluate_answer", self.evaluate_answer_quality)
+        builder.add_node("improve_answer", self.improve_answer)
+
+
         # 엣지 연결
         builder.set_entry_point("process_question")
         builder.add_edge("process_question", "search_rag")
         builder.add_edge("search_rag", "fetch_metadata")
         builder.add_edge("fetch_metadata", "fetch_scripts")
         builder.add_edge("fetch_scripts", "process_scripts")
-        builder.add_edge("process_scripts", "select_chunks")
+        builder.add_edge("process_scripts", "select_chunks")             
         builder.add_edge("select_chunks", "generate_answer")
-        builder.add_edge("generate_answer", END)
+        # 답변 → 평가로 변경
+        builder.add_edge("generate_answer", "evaluate_answer")
+
+        
+        # 조건부 엣지: 품질에 따라 분기
+        builder.add_conditional_edges(
+            "evaluate_answer",
+            self.should_improve_answer,
+            {
+                "improve": "improve_answer",  # 품질 낮음 → 개선
+                "finish": END               # 품질 양호 → 종료
+            }
+        )
+         # 개선 → 다시 평가
+        builder.add_edge("improve_answer", "evaluate_answer")
         
         return builder.compile()
     
@@ -128,18 +163,17 @@ class MeetingQAAgent:
                 "current_step": "process_question_failed"
             }
     
-    def search_rag_summaries(self, state: MeetingQAState) -> MeetingQAState:
+    async def search_rag_summaries(self, state: MeetingQAState) -> MeetingQAState:
         """2단계: RAG 서비스에서 관련 요약본 검색"""
         try:
             processed_question = state.get("processed_question", "")
             search_keywords = state.get("search_keywords", [])
-            rag_service_url = state.get("rag_service_url", "")
             
-            if not all([processed_question, search_keywords, rag_service_url]):
+            if not all([processed_question, search_keywords]):
                 raise ValueError("필수 매개변수가 누락되었습니다.")
             
-            rag_client = RAGClient(rag_service_url)
-            relevant_summaries = rag_client.search_summaries(
+            rag_client = RAGClient(RAG_SERVICE_URL)
+            relevant_summaries = await rag_client.search_summaries(
                 query=processed_question,
                 keywords=search_keywords,
                 top_k=5,
@@ -171,19 +205,15 @@ class MeetingQAAgent:
             }
     
     def fetch_meeting_metadata(self, state: MeetingQAState) -> MeetingQAState:
-        """3단계: PostgreSQL에서 회의 메타데이터 조회"""
+        """3단계: 회의록 API에서 회의 메타데이터 조회"""
         try:
             selected_meeting_ids = state.get("selected_meeting_ids", [])
-            postgresql_config = state.get("postgresql_config", {})
             
             if not selected_meeting_ids:
                 raise ValueError("선택된 회의 ID가 없습니다.")
             
-            if not postgresql_config:
-                raise ValueError("PostgreSQL 설정이 없습니다.")
-            
-            with PostgreSQLClient(postgresql_config) as pg_client:
-                meeting_metadata = pg_client.fetch_meeting_metadata(selected_meeting_ids)
+            meeting_client = MeetingAPIClient(MEETING_API_URL)
+            meeting_metadata = meeting_client.fetch_meeting_metadata(selected_meeting_ids)
             
             logger.info(f"메타데이터 조회 완료: {len(meeting_metadata)}개 회의 정보")
             
@@ -202,14 +232,15 @@ class MeetingQAAgent:
             }
     
     def fetch_original_scripts(self, state: MeetingQAState) -> MeetingQAState:
-        """4단계: Azure Blob Storage에서 원본 스크립트 다운로드"""
+        """4단계: 회의록 API에서 원본 스크립트 다운로드"""
         try:
             meeting_metadata = state.get("meeting_metadata", [])
             
             if not meeting_metadata:
                 raise ValueError("회의 메타데이터가 없습니다.")
             
-            original_scripts = self.blob_client.download_text_files(meeting_metadata)
+            meeting_client = MeetingAPIClient(MEETING_API_URL)
+            original_scripts = meeting_client.download_text_files(meeting_metadata)
             
             logger.info(f"원본 스크립트 다운로드 완료: {len(original_scripts)}개 파일")
             
@@ -400,4 +431,79 @@ class MeetingQAAgent:
                 **state,
                 "error_message": f"답변 생성 실패: {str(e)}",
                 "current_step": "generate_answer_failed"
+            }
+
+    def evaluate_answer_quality(self, state: MeetingQAState) -> MeetingQAState:
+        """답변 품질 평가"""
+        try:
+            user_question = state.get("user_question", "")
+            final_answer = state.get("final_answer", "")
+            context_chunks = state.get("context_chunks", [])
+            
+            if not final_answer:
+                return {**state, "answer_quality_score": 1}
+            
+            # 평가 프롬프트
+            evaluation_prompt = ChatPromptTemplate.from_template(
+                '''당신은 회의록 QA 시스템의 답변 품질을 평가하는 전문가입니다.
+                
+                질문: {question}
+                
+                답변: {answer}
+                
+                참고 자료:
+                {context}
+                
+                다음 기준으로 답변을 1-5점으로 평가해주세요:
+                
+                1. **내용 일치성** (40%): 답변이 참고 자료의 내용과 일치하는가?
+                2. **질문 적절성** (40%): 답변이 질문에 직접적으로 대답하는가?
+                3. **구체성** (20%): 답변이 구체적이고 유용한 정보를 제공하는가?
+                
+                점수 기준:
+                - 5점: 매우 우수 (모든 기준을 완벽히 충족)
+                - 4점: 우수 (대부분 기준을 충족)
+                - 3점: 보통 (기본적인 요구사항은 충족)
+                - 2점: 미흡 (일부 기준만 충족)
+                - 1점: 부족 (기준을 거의 충족하지 못함)
+                
+                평가 이유와 함께 점수만 숫자로 출력하세요.
+                예: "3점 - 질문에는 답했으나 구체성이 부족함"
+                '''
+            )
+            
+            context_text = "\n".join(context_chunks[:5])  # 상위 5개만
+            
+            formatted_prompt = evaluation_prompt.format(
+                question=user_question,
+                answer=final_answer,
+                context=context_text
+            )
+            
+            response = self.llm.invoke(formatted_prompt)
+            evaluation_result = response.content.strip()
+            
+            # 점수 추출 (정규식으로)
+            import re
+            score_match = re.search(r'(\d+)점', evaluation_result)
+            quality_score = int(score_match.group(1)) if score_match else 3
+            
+            logger.info(f"답변 품질 평가 완료: {quality_score}점")
+            logger.info(f"평가 내용: {evaluation_result}")
+            
+            return {
+                **state,
+                "answer_quality_score": quality_score,
+                "quality_evaluation": evaluation_result,
+                "current_step": "answer_evaluated"
+            }
+            
+        except Exception as e:
+            logger.error(f"답변 품질 평가 실패: {str(e)}")
+            # 평가 실패 시 기본적으로 통과
+            return {
+                **state,
+                "answer_quality_score": 4,
+                "quality_evaluation": "평가 실패 - 기본 통과",
+                "current_step": "evaluation_failed"
             }

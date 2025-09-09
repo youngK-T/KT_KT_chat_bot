@@ -38,9 +38,7 @@ class MeetingQAState(TypedDict):
     sources: List[Dict]  # 출처 정보
     confidence_score: float  # 답변 신뢰도
     
-    # API 연결 정보
-    rag_service_url: str  # RAG 서비스 엔드포인트
-    meeting_api_url: str  # 회의록 API 서비스 엔드포인트
+    # API 연결 정보는 설정 파일에서 관리 (config/settings.py)
     
     # 시스템 상태
     current_step: str  # 현재 처리 단계

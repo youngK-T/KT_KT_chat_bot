@@ -2,7 +2,7 @@ from langchain_openai import AzureOpenAIEmbeddings
 from typing import List, Dict
 import numpy as np
 import logging
-from config.settings import AZURE_OPENAI_CONFIG
+from config.settings import AZURE_OPENAI_CONFIG, AZURE_OPENAI_EMBEDDING_DEPLOYMENT
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ class EmbeddingManager:
     
     def __init__(self):
         self.embeddings = AzureOpenAIEmbeddings(
-            deployment=AZURE_OPENAI_CONFIG["deployment_name"],
+            deployment=AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
             api_version=AZURE_OPENAI_CONFIG["api_version"],
             azure_endpoint=AZURE_OPENAI_CONFIG["endpoint"],
             api_key=AZURE_OPENAI_CONFIG["api_key"]
