@@ -46,8 +46,6 @@ async def process_meeting_question(
             "final_answer": "",
             "sources": [],
             "confidence_score": 0.0,
-            "rag_service_url": request.rag_service_url,
-            "meeting_api_url": request.meeting_api_url,
             "current_step": "initialized",
             "error_message": ""
         }

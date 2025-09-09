@@ -4,8 +4,6 @@ from typing import List, Dict, Optional
 class MeetingQARequest(BaseModel):
     """회의록 QA 요청 모델"""
     question: str = Field(..., description="사용자 질문", min_length=1)
-    meeting_api_url: str = Field(..., description="회의록 API 서비스 URL")
-    rag_service_url: str = Field(..., description="RAG 서비스 URL")
 
 class SourceInfo(BaseModel):
     """출처 정보 모델"""

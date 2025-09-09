@@ -29,23 +29,22 @@ class MeetingQAAgent:
         # Agent 그래프 구성
         self.graph = self._build_graph()
 
-    def should_improve_answer(self, state: MeetingQAState) -> str:
-        """답변 개선 여부 결정"""
+    def should_improve_answer(self, state: MeetingQAState) -> Literal["improve", "finish"]:
         quality_score = state.get("answer_quality_score", 5)
         attempt_count = state.get("improvement_attempts", 0)
         
-        print(f"🔍 개선 여부 결정: 점수={quality_score}, 시도={attempt_count}")
+        logger.info(f"개선 여부 결정: 점수={quality_score}, 시도={attempt_count}")
         
         # 이미 개선을 시도했다면 더 이상 개선하지 않음
         if attempt_count >= 1:
-            print("   → 이미 1회 개선 시도 완료, 종료")
+            logger.info("이미 1회 개선 시도 완료, 종료")
             return "finish"
         
         if quality_score <= 3:
-            print("   → 품질 낮음, 개선 진행")
+            logger.info("답변 품질 낮음, 개선 진행")
             return "improve"
         else:
-            print("   → 품질 양호, 종료")
+            logger.info("답변 품질 양호, 완료")
             return "finish"
     
     def _build_graph(self) -> StateGraph:
@@ -75,15 +74,15 @@ class MeetingQAAgent:
         
         # 조건부 엣지
         builder.add_conditional_edges(
-            "evaluate_answer",
+            "evaluate_answer", 
             self.should_improve_answer,
             {
                 "improve": "improve_answer",
                 "finish": END
             }
         )
-        builder.add_edge("improve_answer", "evaluate_answer")
-        
+        builder.add_edge("improve_answer", END)        
+
         return builder.compile()
 
     def summarize_conversation_history(self, state: MeetingQAState) -> MeetingQAState:
@@ -351,12 +350,7 @@ class MeetingQAAgent:
         try:
             processed_question = state.get("processed_question", "")
             search_keywords = state.get("search_keywords", [])
-            rag_service_url = state.get("rag_service_url", "")
-            
-            if not all([processed_question, search_keywords, rag_service_url]):
-                raise ValueError("필수 매개변수가 누락되었습니다.")
-            
-            rag_client = RAGClient(rag_service_url)
+            rag_client = RAGClient(RAG_SERVICE_URL)
             relevant_summaries = rag_client.search_summaries(
                 query=processed_question,
                 keywords=search_keywords,
