@@ -64,22 +64,27 @@ async def process_meeting_question(
                 detail=final_state["error_message"]
             )
         
-        # 처리 단계 로그 생성
+        # 처리 단계 로그 생성 (None 안전 처리)
+        def _count(v):
+            try:
+                return len(v) if v is not None else 0
+            except Exception:
+                return 0
+
         processing_steps = [
             "질문 전처리 완료",
-            f"RAG 검색 완료: {len(final_state.get('relevant_summaries', []))}개 관련 요약본 발견",
-            f"DB 조회 완료: {len(final_state.get('meeting_metadata', []))}개 회의 메타데이터 획득",
-            f"스토리지 조회 완료: {len(final_state.get('original_scripts', []))}개 원본 스크립트 다운로드",
-            f"청킹 및 임베딩 완료: {len(final_state.get('chunked_scripts', []))}개 청크 생성",
-            f"관련 청크 선별 완료: {len(final_state.get('relevant_chunks', []))}개 청크 선택",
+            f"RAG 검색 완료: {_count(final_state.get('relevant_summaries'))}개 관련 요약본 발견",
+            f"원본 스크립트 조회 완료: {_count(final_state.get('original_scripts'))}개",
+            f"청킹 및 임베딩 완료: {_count(final_state.get('chunked_scripts'))}개 청크 생성",
+            f"관련 청크 선별 완료: {_count(final_state.get('relevant_chunks'))}개 청크 선택",
             "최종 답변 생성 완료"
         ]
         
         # 응답 생성
         response = MeetingQAResponse(
-            answer=final_state.get("final_answer", "답변을 생성할 수 없습니다."),
-            sources=final_state.get("sources", []),
-            confidence_score=final_state.get("confidence_score", 0.0),
+            answer=str(final_state.get("final_answer") or "답변을 생성할 수 없습니다."),
+            sources=final_state.get("sources") or [],
+            confidence_score=float(final_state.get("confidence_score") or 0.0),
             processing_steps=processing_steps
         )
         
