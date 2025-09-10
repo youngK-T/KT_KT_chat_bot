@@ -72,8 +72,8 @@ class QualityEvaluator:
     
     def should_improve_answer(self, state: MeetingQAState) -> Literal["improve", "finish"]:
         """답변 개선 여부 결정"""
-        score = state.get("answer_quality_score", 5)
-        tries = state.get("improvement_attempts", 0)
+        score = int(state.get("answer_quality_score") or 5)
+        tries = int(state.get("improvement_attempts") or 0)
         
         # 한 번만 개선 시도
         if tries >= 1:

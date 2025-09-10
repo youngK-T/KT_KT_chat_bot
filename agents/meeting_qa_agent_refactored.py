@@ -32,7 +32,7 @@ class MeetingQAAgent:
             azure_endpoint=AZURE_OPENAI_CONFIG["endpoint"],
             api_version=AZURE_OPENAI_CONFIG["api_version"],
             azure_deployment=AZURE_OPENAI_CONFIG["deployment_name"],
-            temperature=0.1
+            temperature=1
         )
         
         # 분리된 모듈들 초기화

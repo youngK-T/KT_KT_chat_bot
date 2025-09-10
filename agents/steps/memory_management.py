@@ -18,15 +18,15 @@ class MemoryManager:
         """이전 대화 요약 생성"""
         try:
             current_question = state.get("user_question", "")
-            previous_memory = state.get("conversation_memory", "")
-            conversation_count = state.get("conversation_count", 0)
+            previous_memory = state.get("conversation_memory", "") or ""
+            conversation_count = int(state.get("conversation_count") or 0)
             
-            if conversation_count == 0:
+            if conversation_count == 0 or not previous_memory:
                 # 첫 번째 대화
                 return {
                     **state,
                     "conversation_memory": "",
-                    "conversation_count": 1
+                    "conversation_count": conversation_count + 1
                 }
             
             # 이전 대화와 현재 질문을 요약
@@ -51,8 +51,8 @@ class MemoryManager:
             logger.error(f"대화 요약 실패: {str(e)}")
             return {
                 **state,
-                "conversation_memory": state.get("conversation_memory", ""),
-                "conversation_count": state.get("conversation_count", 0) + 1
+                "conversation_memory": state.get("conversation_memory", "") or "",
+                "conversation_count": int(state.get("conversation_count") or 0) + 1
             }
     
     def determine_conversation_mode(self, state: MeetingQAState) -> MeetingQAState:

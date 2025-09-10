@@ -121,7 +121,7 @@ class AnswerGenerator:
             quality_score = state.get("answer_quality_score", 0)
             relevant_summaries = state.get("relevant_summaries", [])
             relevant_chunks = state.get("relevant_chunks", [])
-            improvement_attempts = state.get("improvement_attempts", 0) + 1
+            improvement_attempts = int(state.get("improvement_attempts") or 0) + 1
             
             # 컨텍스트 조합
             context_parts = []
@@ -168,6 +168,6 @@ class AnswerGenerator:
             logger.error(f"답변 개선 실패: {str(e)}")
             return {
                 **state,
-                "improvement_attempts": state.get("improvement_attempts", 0) + 1,
+                "improvement_attempts": int(state.get("improvement_attempts") or 0) + 1,
                 "current_step": "improvement_failed"
             }
