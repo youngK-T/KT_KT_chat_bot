@@ -67,11 +67,15 @@ class TextProcessor:
     def select_relevant_chunks(self, state: MeetingQAState) -> MeetingQAState:
         """6단계: 질문과 관련된 청크 선별"""
         try:
-            processed_question = state.get("processed_question", "")
-            chunked_scripts = state.get("chunked_scripts", [])
+            # 질문이 비어 있으면 user_question으로 폴백
+            processed_question = (state.get("processed_question") or state.get("user_question") or "").strip()
+            # 청크 리스트 None 방지
+            chunked_scripts = state.get("chunked_scripts") or []
             
-            if not processed_question or not chunked_scripts:
-                raise ValueError("필수 데이터가 누락되었습니다.")
+            if not processed_question:
+                raise ValueError("질문 텍스트가 없습니다.")
+            if not chunked_scripts:
+                raise ValueError("처리된 원본 청크가 없습니다.")
             
             # 질문 임베딩 생성
             query_embedding = self.embedding_manager.embed_query(processed_question)
