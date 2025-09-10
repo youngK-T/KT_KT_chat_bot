@@ -4,7 +4,7 @@ import logging
 
 from models.schemas import MeetingQARequest, MeetingQAResponse, HealthResponse, ErrorResponse
 from models.state import MeetingQAState
-from agents.meeting_qa_agent import MeetingQAAgent
+from agents import MeetingQAAgent
 from config.settings import API_VERSION
 
 logger = logging.getLogger(__name__)
@@ -36,8 +36,9 @@ async def process_meeting_question(
             "user_question": request.question,
             "processed_question": "",
             "search_keywords": [],
+            "user_selected_script_ids": request.user_selected_script_ids,
             "relevant_summaries": [],
-            "selected_meeting_ids": [],
+            "selected_script_ids": [],
             "meeting_metadata": [],
             "original_scripts": [],
             "chunked_scripts": [],

@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Dict
+from typing import TypedDict, List, Dict, Optional
 
 class MeetingQAState(TypedDict):
     # 사용자 입력
@@ -13,7 +13,7 @@ class MeetingQAState(TypedDict):
     #   "meeting_date": "...", "similarity_score": 0.85}, ...]
     
     # PostgreSQL 조회 단계 (1차 호출)
-    selected_meeting_ids: List[str]  # 선택된 회의 ID들
+    selected_script_ids: List[str]  # 선택된 스크립트 ID들
     meeting_metadata: List[Dict]  # PostgreSQL에서 조회한 메타데이터
     # meeting_metadata 구조:
     # [{"meeting_id": "...", "blob_url": "https://...", "blob_key": "...", 
@@ -53,3 +53,8 @@ class MeetingQAState(TypedDict):
      # 답변 품질 관리
     answer_quality_score: int  # 1-5점 품질 점수
     improvement_attempts: int  # 개선 시도 횟수
+    
+    # 분기 상태 관리
+    conversation_mode: str  # "general" 또는 "specific_script"
+    user_selected_script_ids: List[str]  # 사용자가 선택한 스크립트 ID 목록
+    selected_script_ids: List[str]  # RAG 유사도 검색으로 선별된 스크립트 ID 목록

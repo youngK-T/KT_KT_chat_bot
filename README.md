@@ -5,8 +5,8 @@
 ## 🏗️ 아키텍처
 
 ```
-사용자 질문 → RAG 검색 → PostgreSQL → Azure Blob → 답변 생성
-             (요약본)      (메타데이터)   (원본 텍스트)
+사용자 질문 → RAG 검색 → 원본 스크립트 조회(API) → 청킹/임베딩 → 답변 생성/평가
+            (요약 임베딩)   (GET /api/scripts)     (LangChain Splitter)
 ```
 
 ## 📁 프로젝트 구조
@@ -20,11 +20,16 @@ KT_KT_chat_bot/
 │   ├── state.py           # Agent State 정의
 │   └── schemas.py         # Pydantic 스키마
 ├── 📁 agents/              # Agent 로직
-│   └── meeting_qa_agent.py # 메인 QA Agent
+│   ├── meeting_qa_agent_refactored.py # 메인 QA Agent (그래프 오케스트레이션)
+│   └── steps/                       # 단계별 모듈
+│       ├── question_processing.py   # 질문 전처리
+│       ├── rag_search.py            # RAG 검색(전체/다중)
+│       ├── script_fetch.py          # 원본 스크립트 조회(다중 GET)
+│       ├── text_processing.py       # 청킹/임베딩/유사도
+│       ├── answer_generation.py     # 답변 생성/개선
+│       └── quality_evaluation.py    # 품질 평가 및 라우팅
 ├── 📁 services/            # 외부 서비스 클라이언트
-│   ├── rag_client.py      # RAG 서비스
-│   ├── postgres_client.py # PostgreSQL
-│   └── blob_client.py     # Azure Blob Storage
+│   └── rag_client.py      # RAG 서비스 클라이언트
 ├── 📁 utils/               # 유틸리티
 │   ├── text_processing.py # 텍스트 처리
 │   └── embeddings.py      # 임베딩 관리
@@ -56,7 +61,7 @@ AZURE_OPENAI_DEPLOYMENT_NAME=your_deployment_name
 
 ### 3. 서버 실행
 ```bash
-python main.py
+python -m api.main
 ```
 
 서버가 시작되면:
@@ -72,15 +77,8 @@ POST /api/v1/meeting-qa
 Content-Type: application/json
 
 {
-    "question": "지난 주 회의에서 결정된 마케팅 전략은?",
-    "rag_service_url": "http://rag-service:8080",
-    "postgresql_config": {
-        "host": "localhost",
-        "database": "meeting_db",
-        "user": "postgres",
-        "password": "password",
-        "port": 5432
-    }
+  "question": "지난 주 회의에서 결정된 마케팅 전략은?",
+  "user_selected_script_ids": []
 }
 ```
 
@@ -101,7 +99,7 @@ Content-Type: application/json
     "processing_steps": [
         "질문 전처리 완료",
         "RAG 검색 완료: 3개 관련 요약본 발견",
-        "DB 조회 완료: 2개 원본 스크립트 획득",
+        "원본 스크립트 조회 완료: 2개",
         "청킹 및 임베딩 완료",
         "관련 청크 선별 완료",
         "최종 답변 생성 완료"
@@ -111,13 +109,14 @@ Content-Type: application/json
 
 ## 🔧 Agent 처리 흐름
 
-1. **질문 전처리**: 검색 최적화된 형태로 변환, 키워드 추출
-2. **RAG 검색**: 외부 RAG 서비스에서 관련 요약본 검색
-3. **메타데이터 조회**: PostgreSQL에서 Blob Storage 정보 획득
-4. **원본 다운로드**: Azure Blob Storage에서 원본 텍스트 다운로드
-5. **텍스트 처리**: 청킹, 임베딩 생성
-6. **관련 청크 선별**: 질문과 유사도 높은 청크 선택
-7. **답변 생성**: LLM을 통한 최종 답변 생성
+1. **질문 전처리**: 검색 최적화/키워드 추출
+2. **RAG 검색**: 
+   - 기본 챗봇: GET `/api/rag/script-summaries`(전체) → 유사도 선별
+   - 상세 챗봇: GET `/api/rag/script-summaries?scriptIds=a,b,c`(다중) → 유사도 선별
+3. **원본 스크립트 조회**: GET `/api/scripts?scriptIds=a,b,c` → `scriptText` 수신
+4. **텍스트 처리**: LangChain `RecursiveCharacterTextSplitter`로 청킹, 임베딩 생성
+5. **관련 청크 선별**: 코사인 유사도 기반 Top-K
+6. **답변 생성/평가/개선**: LLM 생성 → 품질 평가 → 1회 개선 시도
 
 ## 🧪 테스트
 
@@ -133,24 +132,16 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 ## 🔧 환경 설정
 
-### PostgreSQL 테이블 구조
-```sql
-CREATE TABLE meeting_files (
-    meeting_id VARCHAR(50) PRIMARY KEY,
-    meeting_title VARCHAR(200),
-    meeting_date DATE,
-    blob_url TEXT,
-    blob_key TEXT,
-    file_size BIGINT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-```
-
 ### 외부 서비스 요구사항
-- **RAG 서비스**: `/search` 엔드포인트 필요
-- **PostgreSQL**: 회의 메타데이터 저장
-- **Azure Blob Storage**: 원본 회의록 텍스트 파일
+- **RAG 서비스**:
+  - 전체: `GET /api/rag/script-summaries`
+  - 다중: `GET /api/rag/script-summaries?scriptIds=a,b,c`
+  - 응답: `{ scriptId, embedding[] }` 배열 또는 `{ scriptId: { embedding } }` 매핑
+- **회의 스크립트 서비스**:
+  - 전체: `GET /api/scripts`
+  - 단일: `GET /api/scripts?scriptIds=abc123`
+  - 다중: `GET /api/scripts?scriptIds=a,b,c`
+  - 응답: `{ scriptId, storageUrl, scriptText }`
 
 ## 📝 개발 노트
 

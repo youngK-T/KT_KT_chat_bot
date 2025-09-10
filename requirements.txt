@@ -4,6 +4,7 @@ langchain-openai==0.1.23
 langchain-core==0.2.38
 langchain-community==0.2.16
 langgraph==0.2.3
+langchain-text-splitters==0.2.2
 
 # OpenAI 패키지 (langchain-openai 호환)
 openai>=1.40.0,<2.0.0
@@ -13,7 +14,7 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 
 # 기본 패키지
-pydantic==2.5.0
+pydantic>=2.7.4,<3
 requests==2.31.0
 numpy>=1.24.3
 typing-extensions>=4.11.0

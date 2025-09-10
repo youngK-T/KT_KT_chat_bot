@@ -1,46 +1,28 @@
 from typing import List, Dict
 import re
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[Dict]:
-    """텍스트를 청크로 분할"""
+    """텍스트를 청크로 분할 (LangChain RecursiveCharacterTextSplitter 사용)"""
     if not text:
         return []
-    
-    chunks = []
-    text_length = len(text)
-    start = 0
-    chunk_index = 0
-    
-    while start < text_length:
-        # 청크 끝 위치 계산
-        end = min(start + chunk_size, text_length)
-        
-        # 문장 경계에서 분할하도록 조정
-        if end < text_length:
-            # 마지막 문장 끝을 찾기
-            last_period = text.rfind('.', start, end)
-            last_exclamation = text.rfind('!', start, end)
-            last_question = text.rfind('?', start, end)
-            
-            sentence_end = max(last_period, last_exclamation, last_question)
-            
-            if sentence_end > start:
-                end = sentence_end + 1
-        
-        chunk_text = text[start:end].strip()
-        
-        if chunk_text:
-            chunks.append({
-                "chunk_text": chunk_text,
-                "chunk_index": chunk_index,
-                "start_pos": start,
-                "end_pos": end
-            })
-            chunk_index += 1
-        
-        # 다음 청크 시작 위치 (오버랩 고려)
-        start = max(start + 1, end - chunk_overlap)
-    
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", ".", "! ", "? ", " "]
+    )
+
+    docs = splitter.create_documents([text])
+
+    chunks: List[Dict] = []
+    for idx, doc in enumerate(docs):
+        chunks.append({
+            "chunk_text": doc.page_content,
+            "chunk_index": idx,
+            # start/end는 TextSplitter에서 직접 제공되지 않으므로 생략
+        })
+
     return chunks
 
 def clean_text(text: str) -> str:

@@ -54,9 +54,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # 비루트 사용자로 전환
 USER appuser
 
-# 헬스체크 추가
+# 헬스체크 추가 (FastAPI health endpoint)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/chat/health || exit 1
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
 # 애플리케이션 실행
 CMD ["python", "main.py"]
