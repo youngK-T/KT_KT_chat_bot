@@ -9,8 +9,8 @@ class MeetingQARequest(BaseModel):
 class SourceInfo(BaseModel):
     """출처 정보 모델"""
     meeting_id: str = Field(..., description="회의 ID")
-    meeting_title: str = Field(..., description="회의 제목")
-    meeting_date: str = Field(..., description="회의 날짜")
+    meeting_title: Optional[str] = Field(default="", description="회의 제목")
+    meeting_date: Optional[str] = Field(default="", description="회의 날짜")
     chunk_index: Optional[int] = Field(None, description="청크 인덱스")
     relevance_score: float = Field(..., description="관련성 점수", ge=0.0, le=1.0)
 
