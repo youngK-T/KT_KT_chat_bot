@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 import logging
+from typing import Optional
 
 from models.schemas import MeetingQARequest, MeetingQAResponse, HealthResponse, ErrorResponse
 from models.state import MeetingQAState
@@ -39,7 +40,6 @@ async def process_meeting_question(
             "user_selected_script_ids": request.user_selected_script_ids,
             "relevant_summaries": [],
             "selected_script_ids": [],
-            "meeting_metadata": [],
             "original_scripts": [],
             "chunked_scripts": [],
             "relevant_chunks": [],
@@ -48,7 +48,10 @@ async def process_meeting_question(
             "sources": [],
             "confidence_score": 0.0,
             "current_step": "initialized",
-            "error_message": ""
+            "error_message": "",
+            "conversation_count": 0,        # 추가
+            "answer_quality_score": 0,      # 추가
+            "improvement_attempts": 0       # 추가
         }
         
         # Agent 실행
