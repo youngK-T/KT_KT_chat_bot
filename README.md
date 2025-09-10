@@ -88,7 +88,7 @@ Content-Type: application/json
     "answer": "지난 주 회의에서는 소셜미디어 중심의 마케팅 전략이 결정되었습니다...",
     "sources": [
         {
-            "meeting_id": "MEETING_2024_0101_001",
+            "script_id": "MEETING_2024_0101_001",
             "meeting_title": "마케팅 전략 회의",
             "meeting_date": "2024-01-01",
             "chunk_index": 3,

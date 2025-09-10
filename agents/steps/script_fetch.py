@@ -79,7 +79,7 @@ class ScriptFetcher:
                 script_text = script_text or ""
 
                 original_scripts.append({
-                    "meeting_id": script_id,
+                    "script_id": script_id,
                     "content": script_text,
                     "filename": f"meeting_{script_id}.txt"
                 })

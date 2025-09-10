@@ -49,7 +49,7 @@ class EmbeddingManager:
             logger.error(f"쿼리 임베딩 생성 실패: {str(e)}")
             raise Exception(f"쿼리 임베딩 생성 실패: {str(e)}")
     
-    def add_embeddings_to_chunks(self, chunks: List[Dict], meeting_id: str) -> List[Dict]:
+    def add_embeddings_to_chunks(self, chunks: List[Dict], script_id: str) -> List[Dict]:
         """청크 리스트에 임베딩 추가"""
         try:
             if not chunks:
@@ -64,7 +64,7 @@ class EmbeddingManager:
             # 청크에 임베딩 추가
             for i, chunk in enumerate(chunks):
                 chunk["chunk_embedding"] = embeddings[i]
-                chunk["meeting_id"] = meeting_id
+                chunk["script_id"] = script_id
             
             return chunks
             

@@ -28,8 +28,8 @@ class TextProcessor:
             all_chunked_scripts = []
             
             for script in original_scripts:
-                meeting_id = script["meeting_id"]
-                full_content = script["content"]  # 'full_content' -> 'content'로 수정
+                script_id = script["script_id"]
+                full_content = script["content"]
                 
                 # 텍스트 정리
                 cleaned_content = clean_text(full_content)
@@ -43,7 +43,7 @@ class TextProcessor:
                 
                 # 임베딩 추가
                 chunks_with_embeddings = self.embedding_manager.add_embeddings_to_chunks(
-                    chunks, meeting_id
+                    chunks, script_id
                 )
                 
                 all_chunked_scripts.extend(chunks_with_embeddings)
@@ -118,7 +118,7 @@ class TextProcessor:
             
             # RAG 요약본들과 유사도 계산
             relevant_summaries = []
-            for meeting_id, summary_data in all_summaries.items():
+            for script_id, summary_data in all_summaries.items():
                 summary_embedding = summary_data.get("embedding", [])
                 if summary_embedding:
                     # 코사인 유사도 계산
@@ -127,7 +127,7 @@ class TextProcessor:
                     
                     if similarity >= 0.6:  # 임계값
                         relevant_summaries.append({
-                            "meeting_id": meeting_id,
+                            "script_id": script_id,
                             "summary_text": summary_data.get("summary_text", ""),
                             "relevance_score": similarity,
                             "meeting_date": summary_data.get("meeting_date", "")

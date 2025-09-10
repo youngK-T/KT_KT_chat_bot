@@ -75,14 +75,14 @@ class AnswerGenerator:
             sources = []
             for chunk in relevant_chunks[:5]:
                 source = {
-                    "meeting_id": chunk["meeting_id"],
+                    "script_id": chunk["script_id"],
                     "chunk_index": chunk["chunk_index"],
                     "relevance_score": chunk["relevance_score"]
                 }
                 sources.append(source)
 
             # 실제 사용된 문서 ID 계산
-            used_script_ids = sorted({s["meeting_id"] for s in sources})
+            used_script_ids = sorted({s["script_id"] for s in sources})
             
             # 신뢰도 계산 (간단한 버전)
             confidence_score = min(0.9, max(0.1, 

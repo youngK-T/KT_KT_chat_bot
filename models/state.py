@@ -8,17 +8,17 @@ class MeetingQAState(TypedDict):
     # RAG 서비스 호출 (요약본 검색)
     relevant_summaries: List[Dict]  # RAG에서 찾은 관련 요약본들
     # relevant_summaries 구조:
-    # [{"summary_text": "...", "meeting_id": "...", "meeting_title": "...", 
+    # [{"summary_text": "...", "script_id": "...", "meeting_title": "...", 
     #   "meeting_date": "...", "similarity_score": 0.85}, ...]
     
     
     original_scripts: List[Dict]
     # 원본 스크립트 처리 단계
     chunked_scripts: List[Dict]  # 청킹된 원본들
-    # [{"meeting_id": "...", "chunk_text": "...", "chunk_index": 0, "chunk_embedding": [...]}]
+    # [{"script_id": "...", "chunk_text": "...", "chunk_index": 0, "chunk_embedding": [...]}]
     
     relevant_chunks: List[Dict]  # 질문과 관련된 청크들만 선별
-    # [{"meeting_id": "...", "chunk_text": "...", "relevance_score": 0.9, "chunk_index": 0}]
+    # [{"script_id": "...", "chunk_text": "...", "relevance_score": 0.9, "chunk_index": 0}]
     
     # 답변 생성 단계
     context_chunks: List[str]  # 요약본 + 관련 원본 청크 조합
