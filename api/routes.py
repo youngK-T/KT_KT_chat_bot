@@ -23,7 +23,7 @@ def get_agent() -> MeetingQAAgent:
         _agent_instance = MeetingQAAgent()
     return _agent_instance
 
-@router.post("/meeting-qa", response_model=MeetingQAResponse)
+@router.post("/query", response_model=MeetingQAResponse)
 async def process_meeting_question(
     request: MeetingQARequest,
     agent: MeetingQAAgent = Depends(get_agent)
