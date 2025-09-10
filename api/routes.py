@@ -85,7 +85,8 @@ async def process_meeting_question(
             answer=str(final_state.get("final_answer") or "답변을 생성할 수 없습니다."),
             sources=final_state.get("sources") or [],
             confidence_score=float(final_state.get("confidence_score") or 0.0),
-            processing_steps=processing_steps
+            processing_steps=processing_steps,
+            used_script_ids=final_state.get("used_script_ids") or []
         )
         
         logger.info(f"질문 처리 완료: 신뢰도 {response.confidence_score:.2f}")

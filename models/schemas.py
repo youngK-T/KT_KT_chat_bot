@@ -20,6 +20,7 @@ class MeetingQAResponse(BaseModel):
     sources: List[SourceInfo] = Field(..., description="출처 정보 목록")
     confidence_score: float = Field(..., description="답변 신뢰도", ge=0.0, le=1.0)
     processing_steps: List[str] = Field(..., description="처리 단계 로그")
+    used_script_ids: List[str] = Field(default_factory=list, description="최종 답변에 실제로 사용된 문서 ID 목록")
 
 class ErrorResponse(BaseModel):
     """오류 응답 모델"""

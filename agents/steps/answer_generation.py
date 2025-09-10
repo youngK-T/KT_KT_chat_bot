@@ -88,6 +88,9 @@ class AnswerGenerator:
                     "relevance_score": chunk["relevance_score"]
                 }
                 sources.append(source)
+
+            # 실제 사용된 문서 ID 계산
+            used_script_ids = sorted({s["meeting_id"] for s in sources})
             
             # 신뢰도 계산 (간단한 버전)
             confidence_score = min(0.9, max(0.1, 
@@ -101,6 +104,7 @@ class AnswerGenerator:
                 "context_chunks": context_parts,
                 "final_answer": final_answer,
                 "sources": sources,
+                "used_script_ids": used_script_ids,
                 "confidence_score": confidence_score,
                 "current_step": "completed"
             }

@@ -37,6 +37,7 @@ class MeetingQAState(TypedDict):
     final_answer: str  # 최종 답변
     sources: List[Dict]  # 출처 정보
     confidence_score: float  # 답변 신뢰도
+    used_script_ids: List[str]  # 최종 답변에 실제로 사용된 문서 ID 목록
     
     # API 연결 정보
     rag_service_url: str  # RAG 서비스 엔드포인트
