@@ -21,9 +21,9 @@ class ScriptFetcher:
 
         사양:
         - 전체:  GET /api/scripts                      → 배열
-        - 단일:  GET /api/scripts?scriptIds=abc123     → 객체
-        - 다중:  GET /api/scripts?scriptIds=a,b,c      → 배열
-        응답 필드: { "scriptId", "storageUrl", "scriptText" }
+        - 단일:  GET /api/scripts?ids=abc123           → 객체
+        - 다중:  GET /api/scripts?ids=a,b,c            → 배열 (요청 순서 보장)
+        응답 필드: { "scriptId", "title", "timestamp", "segments" | "scriptText" }
         """
         try:
             selected_script_ids = state.get("selected_script_ids", [])
@@ -31,13 +31,23 @@ class ScriptFetcher:
                 raise ValueError("selected_script_ids가 없습니다.")
 
             with httpx.Client(timeout=30) as client:
-                params = {"scriptIds": ",".join(selected_script_ids)}
+                params = {"ids": ",".join(selected_script_ids)}
                 response = client.get(f"{self.meeting_api_url}/api/scripts", params=params)
                 if response.status_code != 200:
                     raise Exception(f"API 호출 실패: {response.status_code}")
                 result = response.json()
 
+            # 배열이 아닐 수 있어 보정
             items = result if isinstance(result, list) else [result]
+
+            # 요청 순서 보장: 응답이 순서를 보장한다고 했지만 안전하게 재정렬
+            by_id = {}
+            for it in items:
+                if isinstance(it, dict):
+                    sid = it.get("scriptId") or it.get("id") or it.get("meeting_id")
+                    if sid:
+                        by_id[str(sid)] = it
+            items = [by_id[sid] for sid in selected_script_ids if sid in by_id]
             original_scripts = []
             for item in items:
                 if not isinstance(item, dict):
