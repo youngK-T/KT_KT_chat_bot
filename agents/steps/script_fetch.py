@@ -43,14 +43,35 @@ class ScriptFetcher:
                 if not isinstance(item, dict):
                     continue
                 script_id = item.get("scriptId") or item.get("id") or item.get("meeting_id")
-                script_text = item.get("scriptText") or ""
                 if not script_id:
                     continue
+
+                # 1) 기본: scriptText 사용
+                script_text = item.get("scriptText")
+
+                # 2) 대안: segments 배열 → speaker: text 로 합쳐서 원문 구성
+                if not script_text:
+                    segments = item.get("segments")
+                    if isinstance(segments, list):
+                        lines = []
+                        for seg in segments:
+                            try:
+                                speaker = (seg.get("speaker") or "").strip()
+                                text = (seg.get("text") or "").strip()
+                                if not text:
+                                    continue
+                                line = f"{speaker}: {text}" if speaker else text
+                                lines.append(line)
+                            except Exception:
+                                continue
+                        script_text = "\n".join(lines)
+
+                script_text = script_text or ""
+
                 original_scripts.append({
                     "meeting_id": script_id,
                     "content": script_text,
-                    "filename": f"meeting_{script_id}.txt",
-                    "meeting_metadata": {"meeting_id": script_id, "storage_url": item.get("storageUrl")}
+                    "filename": f"meeting_{script_id}.txt"
                 })
             
             logger.info(f"원본 스크립트 다운로드 완료: {len(original_scripts)}개 파일")

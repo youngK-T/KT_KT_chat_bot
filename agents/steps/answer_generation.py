@@ -74,16 +74,8 @@ class AnswerGenerator:
             # 출처 정보 생성
             sources = []
             for chunk in relevant_chunks[:5]:
-                meeting_metadata = None
-                for script in state.get("original_scripts", []):
-                    if script["meeting_id"] == chunk["meeting_id"]:
-                        meeting_metadata = script.get("meeting_metadata", {})
-                        break
-                
                 source = {
                     "meeting_id": chunk["meeting_id"],
-                    "meeting_title": meeting_metadata.get("meeting_title", ""),
-                    "meeting_date": str(meeting_metadata.get("meeting_date", "")),
                     "chunk_index": chunk["chunk_index"],
                     "relevance_score": chunk["relevance_score"]
                 }
