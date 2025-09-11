@@ -42,3 +42,6 @@ class MeetingQAState(TypedDict):
     # 분기 상태 관리
     user_selected_script_ids: List[str]  # 사용자가 선택한 스크립트 ID 목록
     selected_script_ids: List[str]  # RAG 유사도 검색으로 선별된 스크립트 ID 목록
+    
+    # 콘텐츠 필터 관리
+    content_filter_triggered: bool  # Azure 콘텐츠 필터 감지 여부

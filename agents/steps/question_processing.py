@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List
 from langchain_core.prompts import ChatPromptTemplate
 from models.state import MeetingQAState
+from utils.content_filter import detect_content_filter, create_safe_response
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,14 @@ class QuestionProcessor:
             
         except Exception as e:
             logger.error(f"질문 전처리 실패: {str(e)}")
+            
+            # Azure 콘텐츠 필터 감지 (오류 코드 우선)
+            filter_info = detect_content_filter(e)
+            if filter_info['is_filtered']:
+                logger.warning(f"질문 전처리 중 콘텐츠 필터 감지: {filter_info}")
+                return create_safe_response(state, 'question_processing', filter_info)
+            
+            # 일반적인 오류 처리
             return {
                 **state,
                 "error_message": f"질문 전처리 실패: {str(e)}",
