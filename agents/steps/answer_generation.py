@@ -91,13 +91,19 @@ class AnswerGenerator:
             
             # fallback 메시지 처리 제거 (단순한 에러 처리로 변경)
             
-            # 출처 정보 생성
+            # 출처 정보 생성 (매핑 딕셔너리 사용)
+            script_metadata = state.get("script_metadata", {})
             sources = []
             for chunk in relevant_chunks[:10]:  # 더 많은 청크에서 선별
+                script_id = chunk["script_id"]
+                metadata = script_metadata.get(script_id, {})
+                
                 source = {
-                    "script_id": chunk["script_id"],
+                    "script_id": script_id,
                     "chunk_index": chunk["chunk_index"],
-                    "relevance_score": chunk["relevance_score"]
+                    "relevance_score": chunk["relevance_score"],
+                    "meeting_title": metadata.get("title", ""),  # 매핑에서 제목 조회
+                    "meeting_date": metadata.get("timestamp", "")  # 매핑에서 날짜 조회
                 }
                 sources.append(source)
             
