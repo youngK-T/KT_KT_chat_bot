@@ -26,9 +26,17 @@ class TextProcessor:
                 raise ValueError("원본 스크립트가 없습니다.")
             
             all_chunked_scripts = []
+            processed_script_ids = set()  # 중복 처리 방지
             
             for script in original_scripts:
                 script_id = script["script_id"]
+                
+                # 이미 처리된 스크립트 건너뛰기
+                if script_id in processed_script_ids:
+                    logger.debug(f"이미 처리된 스크립트 건너뛰기: {script_id}")
+                    continue
+                processed_script_ids.add(script_id)
+                
                 full_content = script["content"]
                 
                 # 텍스트 정리

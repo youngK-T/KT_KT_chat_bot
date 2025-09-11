@@ -27,12 +27,26 @@ class ScriptFetcher:
         """
         try:
             selected_script_ids = state.get("selected_script_ids", [])
+            
+            # === 디버그 로그: Script Fetch 입력 분석 ===
+            logger.info(f"🔍 [DEBUG] selected_script_ids from state: {selected_script_ids}")
+            logger.info(f"🔍 [DEBUG] selected_script_ids type: {type(selected_script_ids)}")
+            logger.info(f"🔍 [DEBUG] selected_script_ids length: {len(selected_script_ids)}")
+            
+            for i, script_id in enumerate(selected_script_ids):
+                logger.info(f"🔍 [DEBUG] script_id[{i}]: '{script_id}' (type: {type(script_id)})")
+            
             if not selected_script_ids:
                 raise ValueError("selected_script_ids가 없습니다.")
 
+            # API 호출 URL 로그
+            params = {"ids": ",".join(selected_script_ids)}
+            api_url = f"{self.meeting_api_url}/api/scripts"
+            logger.info(f"🔍 [DEBUG] API 호출 URL: {api_url}")
+            logger.info(f"🔍 [DEBUG] API 호출 params: {params}")
+
             with httpx.Client(timeout=30) as client:
-                params = {"ids": ",".join(selected_script_ids)}
-                response = client.get(f"{self.meeting_api_url}/api/scripts", params=params)
+                response = client.get(api_url, params=params)
                 if response.status_code != 200:
                     raise Exception(f"API 호출 실패: {response.status_code}")
                 result = response.json()
@@ -49,12 +63,20 @@ class ScriptFetcher:
                         by_id[str(sid)] = it
             items = [by_id[sid] for sid in selected_script_ids if sid in by_id]
             original_scripts = []
+            seen_script_ids = set()  # 중복 방지용 집합
+            
             for item in items:
                 if not isinstance(item, dict):
                     continue
                 script_id = item.get("scriptId") or item.get("id") or item.get("meeting_id")
                 if not script_id:
                     continue
+                
+                # 중복 스크립트 ID 건너뛰기
+                if script_id in seen_script_ids:
+                    logger.debug(f"중복된 스크립트 ID 건너뛰기: {script_id}")
+                    continue
+                seen_script_ids.add(script_id)
 
                 # 1) 기본: scriptText 사용
                 script_text = item.get("scriptText")
@@ -84,7 +106,7 @@ class ScriptFetcher:
                     "filename": f"meeting_{script_id}.txt"
                 })
             
-            logger.info(f"원본 스크립트 다운로드 완료: {len(original_scripts)}개 파일")
+            logger.info(f"원본 스크립트 다운로드 완료 (중복 제거 적용): {len(original_scripts)}개 파일")
             
             return {
                 **state,

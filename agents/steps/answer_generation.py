@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List
 from langchain_core.prompts import ChatPromptTemplate
 from models.state import MeetingQAState
+from utils.content_filter import detect_content_filter, create_safe_response
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,15 @@ class AnswerGenerator:
     
     def __init__(self, llm):
         self.llm = llm
+    
+    def _deduplicate_sources(self, sources: List[Dict]) -> List[Dict]:
+        """script_id 기준 최고 관련도만 유지"""
+        seen = {}
+        for source in sources:
+            script_id = source["script_id"]
+            if script_id not in seen or source["relevance_score"] > seen[script_id]["relevance_score"]:
+                seen[script_id] = source
+        return list(seen.values())
     
     def generate_final_answer(self, state: MeetingQAState) -> MeetingQAState:
         """7단계: 최종 답변 생성"""
@@ -29,13 +39,21 @@ class AnswerGenerator:
             # 컨텍스트 조합
             context_parts = []
             
-            # 요약본 추가
+            # 요약본 추가 (항상 포함)
             for summary in relevant_summaries[:3]:
-                context_parts.append(f"[요약본] {summary.get('summary_text', '')}")
+                summary_text = summary.get('summary_text', '')
+                if summary_text:
+                    context_parts.append(f"[요약본] {summary_text}")
             
-            # 관련 청크 추가
+            # 관련 청크 추가 (있는 경우에만)
             for chunk in relevant_chunks[:5]:
-                context_parts.append(f"[원본] {chunk.get('chunk_text', '')}")
+                chunk_text = chunk.get('chunk_text', '')
+                if chunk_text:
+                    context_parts.append(f"[원본] {chunk_text}")
+            
+            # 원본 청크가 없으면 요약본만으로 답변 생성
+            if not relevant_chunks and relevant_summaries:
+                logger.info("원본 청크가 없어서 요약본만으로 답변 생성")
             
             context = "\n\n".join(context_parts)
             
@@ -44,22 +62,22 @@ class AnswerGenerator:
             
             answer_prompt = ChatPromptTemplate.from_template(
                 '''당신은 회의록 기반 “추출형” QA 시스템입니다.
-                다음 규칙을 엄격하게 지키세요.
-                - 제공된 회의록 내용에서 직접 인용하거나 요약만 허용하며, 추측이나 가정은 절대 금지합니다.
-                - 관련 정보가 없을 경우, 정확히 "제공된 회의록에서 관련 정보를 찾을 수 없습니다."라고 답변합니다.
-                - 최종 답변은 5문장 이내로 간결하게 구성하고, 쉼표를 사용하여 문장을 부드럽게 연결하세요.
-                - 수치, 일정, 담당자는 원문에 있는 표현만 사용하고, 불확실한 표현(예: 아마, 추정, 가능성)은 사용하지 마세요.
+                **형식 규칙:**
+                - 답변은 자연스러운 문장으로 구성하되, 근거가 되는 인용문은 반드시 별도 줄에 작성하세요.
+                - 인용문은 ("인용내용", 화자명) 형식으로 표기하고, 본문과 한 줄 띄워서 구분하세요.
+                - 각 주요 포인트마다 관련 인용문을 바로 아래에 배치하세요.
+                - 최종 답변은 5문장 이내로 간결하게 구성하세요.
                 - 답변은 "~입니다.", "~습니다."와 같은 존댓말을 사용해 주세요.
-                - 답변 시작 시 "제공된 회의록에 따르면," 같은 문장으로 출처를 밝혀주면 좋습니다.
-                - **당신의 답변에 이 규칙들을 반복해서 언급하지 마세요.**
 
-                질문: {question}
-                {memory_context}
+                **예시 형식:**
+                명함 교환 시에는 서서 가벼운 인사와 함께 글자쪽을 상대방에게 향하게 하여 전달해야 합니다.
 
-                관련 회의록 내용:
-                {context}
+                ("명함은 내 얼굴이라고 생각해 주시면 돼요…글자쪽을 상대방을 향하게 손가락으로 가리지 않게 옆부분을 잡고", 화자01)
 
-                답변:'''
+                교환 순서는 아랫사람이 윗사람에게 먼저 주는 것이 예의입니다.
+
+                ("건네는 순서는 이제 아랫사람이 윗사람한테 먼저 하고…오시는 분들이 먼저 이렇게 주세요", 화자01)
+                '''
             )
             
             formatted_prompt = answer_prompt.format(
@@ -71,15 +89,24 @@ class AnswerGenerator:
             response = self.llm.invoke(formatted_prompt)
             final_answer = response.content.strip()
             
+            # fallback 메시지 처리 제거 (단순한 에러 처리로 변경)
+            
             # 출처 정보 생성
             sources = []
-            for chunk in relevant_chunks[:5]:
+            for chunk in relevant_chunks[:10]:  # 더 많은 청크에서 선별
                 source = {
                     "script_id": chunk["script_id"],
                     "chunk_index": chunk["chunk_index"],
                     "relevance_score": chunk["relevance_score"]
                 }
                 sources.append(source)
+            
+            # script_id 기준 중복 제거 (최고 관련도만 유지)
+            sources = self._deduplicate_sources(sources)
+            
+            # 관련도 순으로 정렬하여 상위 5개만 유지
+            sources.sort(key=lambda x: x["relevance_score"], reverse=True)
+            sources = sources[:5]
 
             # 실제 사용된 문서 ID 계산
             used_script_ids = sorted({s["script_id"] for s in sources})
@@ -89,7 +116,7 @@ class AnswerGenerator:
                 sum(chunk["relevance_score"] for chunk in relevant_chunks[:3]) / 3
             )) if relevant_chunks else 0.1
             
-            logger.info(f"답변 생성 완료: 신뢰도 {confidence_score:.2f}")
+            logger.info(f"답변 생성 완료 (출처 중복 제거 적용): 신뢰도 {confidence_score:.2f}, 출처 {len(sources)}개")
             
             return {
                 **state,
@@ -103,6 +130,14 @@ class AnswerGenerator:
             
         except Exception as e:
             logger.error(f"답변 생성 실패: {str(e)}")
+            
+            # Azure 콘텐츠 필터 감지 (오류 코드 우선)
+            filter_info = detect_content_filter(e)
+            if filter_info['is_filtered']:
+                logger.warning(f"답변 생성 중 콘텐츠 필터 감지: {filter_info}")
+                return create_safe_response(state, 'generate_answer', filter_info)
+            
+            # 일반적인 오류 처리
             return {
                 **state,
                 "error_message": f"답변 생성 실패: {str(e)}",
@@ -143,7 +178,9 @@ class AnswerGenerator:
             3. **간결성**: 최종 답변은 5문장 이내로 간결하게 요약하되, 필요한 정보는 모두 포함하세요.
             4. **출처 명시**: 답변 내에 근거가 되는 '참고 자료'의 핵심 문구를 직접 인용하여 신뢰도를 높이세요.
             5. **추측 금지**: '참고 자료'에 없는 내용은 절대 추가하거나 추측하지 마세요.
-            6. **규칙 언급 금지**: 답변 내용에 이 규칙들을 다시 언급하지 마세요.
+            6. **인용문 형식**: 답변은 자연스러운 문장으로 구성하되, 근거가 되는 인용문은 반드시 별도 줄에 작성하세요.
+                            - 인용문은 ("인용내용", 화자명) 형식으로 표기하고, 본문과 한 줄 띄워서 구분하세요.
+            7. **규칙 언급 금지**: 답변 내용에 이 규칙들을 다시 언급하지 마세요.
 
             질문: {question}
             이전 답변: {current_answer}
@@ -152,6 +189,8 @@ class AnswerGenerator:
             """
             response = self.llm.invoke(improvement_prompt)
             improved_answer = response.content.strip()
+            
+            # fallback 메시지 처리 제거 (단순한 에러 처리로 변경)
             
             return {
                 **state,
@@ -162,6 +201,17 @@ class AnswerGenerator:
             
         except Exception as e:
             logger.error(f"답변 개선 실패: {str(e)}")
+            
+            # Azure 콘텐츠 필터 감지 (오류 코드 우선)
+            filter_info = detect_content_filter(e)
+            if filter_info['is_filtered']:
+                logger.warning(f"답변 개선 중 콘텐츠 필터 감지: {filter_info}")
+                safe_response = create_safe_response(state, 'improve_answer', filter_info)
+                # improvement_attempts 추가
+                safe_response["improvement_attempts"] = int(state.get("improvement_attempts") or 0) + 1
+                return safe_response
+            
+            # 일반적인 오류 처리
             return {
                 **state,
                 "improvement_attempts": int(state.get("improvement_attempts") or 0) + 1,
