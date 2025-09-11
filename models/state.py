@@ -12,7 +12,11 @@ class MeetingQAState(TypedDict):
     #   "meeting_date": "...", "similarity_score": 0.85}, ...]
     
     
-    original_scripts: List[Dict]
+    original_scripts: List[Dict]  # 외부 API에서 받은 원본 스크립트들
+    # [{"script_id": "...", "content": "...", "title": "...", "timestamp": "...", "filename": "..."}]
+    
+    script_metadata: Dict[str, Dict]  # 프론트엔드용 제목 정보 (script_id -> metadata)
+    # {"script_id": {"title": "회의 제목", "timestamp": "2025-09-10T10:42:47.385515099"}}
     # 원본 스크립트 처리 단계
     chunked_scripts: List[Dict]  # 청킹된 원본들
     # [{"script_id": "...", "chunk_text": "...", "chunk_index": 0, "chunk_embedding": [...]}]
@@ -23,7 +27,8 @@ class MeetingQAState(TypedDict):
     # 답변 생성 단계
     context_chunks: List[str]  # 요약본 + 관련 원본 청크 조합
     final_answer: str  # 최종 답변
-    sources: List[Dict]  # 출처 정보
+    sources: List[Dict]  # 출처 정보 (청킹 관련 정보만)
+    # [{"script_id": "...", "chunk_index": 0, "relevance_score": 0.9}]
     confidence_score: float  # 답변 신뢰도
     used_script_ids: List[str]  # 최종 답변에 실제로 사용된 문서 ID 목록
     
