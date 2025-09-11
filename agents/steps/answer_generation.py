@@ -91,19 +91,13 @@ class AnswerGenerator:
             
             # fallback 메시지 처리 제거 (단순한 에러 처리로 변경)
             
-            # 출처 정보 생성 (매핑 딕셔너리 사용)
-            script_metadata = state.get("script_metadata", {})
+            # 출처 정보 생성 (청킹 관련 정보만)
             sources = []
             for chunk in relevant_chunks[:10]:  # 더 많은 청크에서 선별
-                script_id = chunk["script_id"]
-                metadata = script_metadata.get(script_id, {})
-                
                 source = {
-                    "script_id": script_id,
+                    "script_id": chunk["script_id"],
                     "chunk_index": chunk["chunk_index"],
-                    "relevance_score": chunk["relevance_score"],
-                    "meeting_title": metadata.get("title", ""),  # 매핑에서 제목 조회
-                    "meeting_date": metadata.get("timestamp", "")  # 매핑에서 날짜 조회
+                    "relevance_score": chunk["relevance_score"]
                 }
                 sources.append(source)
             
@@ -124,15 +118,63 @@ class AnswerGenerator:
             
             logger.info(f"답변 생성 완료 (출처 중복 제거 적용): 신뢰도 {confidence_score:.2f}, 출처 {len(sources)}개")
             
-            return {
+            # 제목 정보는 script_metadata로 별도 제공
+            script_metadata = state.get("script_metadata", {})
+            
+            # 최종 응답 state 구성
+            final_state = {
                 **state,
                 "context_chunks": context_parts,
                 "final_answer": final_answer,
-                "sources": sources,
+                "sources": sources,  # 청킹 관련 정보만
+                "script_metadata": script_metadata,  # 제목 정보는 별도
                 "used_script_ids": used_script_ids,
                 "confidence_score": confidence_score,
                 "current_step": "completed"
             }
+            
+            # 🎯 프론트엔드용 최종 State 구조 로그 출력
+            import json
+            logger.info("=" * 80)
+            logger.info("🎯 최종 답변 STATE 구조 (프론트엔드용)")
+            logger.info("=" * 80)
+            
+            # 핵심 응답 데이터만 추출
+            response_structure = {
+                "user_question": final_state.get("user_question", ""),
+                "final_answer": final_state.get("final_answer", ""),
+                "confidence_score": final_state.get("confidence_score", 0.0),
+                "sources": final_state.get("sources", []),
+                "script_metadata": final_state.get("script_metadata", {}),
+                "used_script_ids": final_state.get("used_script_ids", []),
+                "current_step": final_state.get("current_step", ""),
+                "context_chunks": final_state.get("context_chunks", []),
+                # 추가 메타데이터
+                "total_chunks_analyzed": len(final_state.get("chunked_scripts", [])),
+                "selected_chunks_count": len(final_state.get("relevant_chunks", [])),
+                "memory_context": final_state.get("conversation_memory", "")
+            }
+            
+            logger.info("📋 응답 구조:")
+            logger.info(json.dumps(response_structure, ensure_ascii=False, indent=2))
+            
+            # Sources와 script_metadata 구조 설명
+            if sources:
+                logger.info("📄 Sources 구조 (청킹 관련 정보만):")
+                for i, source in enumerate(sources[:2]):  # 처음 2개만 예시로
+                    logger.info(f"  Source {i+1}:")
+                    logger.info(f"    - script_id: {source.get('script_id', '')}")
+                    logger.info(f"    - chunk_index: {source.get('chunk_index', 0)}")
+                    logger.info(f"    - relevance_score: {source.get('relevance_score', 0.0):.3f}")
+            
+            if script_metadata:
+                logger.info("📋 Script Metadata 구조 (제목 정보):")
+                first_key = list(script_metadata.keys())[0]
+                logger.info(f"  '{first_key}': {script_metadata[first_key]}")
+            
+            logger.info("=" * 80)
+            
+            return final_state
             
         except Exception as e:
             logger.error(f"답변 생성 실패: {str(e)}")

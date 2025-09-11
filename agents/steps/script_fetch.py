@@ -28,22 +28,12 @@ class ScriptFetcher:
         try:
             selected_script_ids = state.get("selected_script_ids", [])
             
-            # === 디버그 로그: Script Fetch 입력 분석 ===
-            logger.info(f"🔍 [DEBUG] selected_script_ids from state: {selected_script_ids}")
-            logger.info(f"🔍 [DEBUG] selected_script_ids type: {type(selected_script_ids)}")
-            logger.info(f"🔍 [DEBUG] selected_script_ids length: {len(selected_script_ids)}")
-            
-            for i, script_id in enumerate(selected_script_ids):
-                logger.info(f"🔍 [DEBUG] script_id[{i}]: '{script_id}' (type: {type(script_id)})")
-            
             if not selected_script_ids:
                 raise ValueError("selected_script_ids가 없습니다.")
 
-            # API 호출 URL 로그
+            # API 호출
             params = {"ids": ",".join(selected_script_ids)}
             api_url = f"{self.meeting_api_url}/api/scripts"
-            logger.info(f"🔍 [DEBUG] API 호출 URL: {api_url}")
-            logger.info(f"🔍 [DEBUG] API 호출 params: {params}")
 
             with httpx.Client(timeout=30) as client:
                 response = client.get(api_url, params=params)
@@ -100,9 +90,10 @@ class ScriptFetcher:
 
                 script_text = script_text or ""
                 
-                # 제목과 타임스탬프 추출
+                # 제목과 타임스탬프 추출 (디버깅 로그 추가)
                 title = item.get("title", "")
                 timestamp = item.get("timestamp", "")
+                
                 
                 original_scripts.append({
                     "script_id": script_id,
@@ -120,7 +111,7 @@ class ScriptFetcher:
                     "timestamp": script["timestamp"]
                 }
             
-            logger.info(f"원본 스크립트 다운로드 완료 (중복 제거 적용): {len(original_scripts)}개 파일")
+            logger.info(f"원본 스크립트 다운로드 완료: {len(original_scripts)}개 파일")
             
             return {
                 **state,

@@ -58,8 +58,9 @@ class TextProcessor:
             
             logger.info(f"스크립트 처리 완료: {len(all_chunked_scripts)}개 청크 생성")
             
+            
             return {
-                **state,
+                **state,  # 이미 script_metadata가 포함되어 있어야 함
                 "chunked_scripts": all_chunked_scripts,
                 "current_step": "scripts_processed"
             }
@@ -147,8 +148,9 @@ class TextProcessor:
             
             logger.info(f"RAG 임베딩 기반 검색 완료: {len(relevant_summaries)}개 요약본")
             
+            
             return {
-                **state,
+                **state,  # script_metadata 포함되어 있어야 함
                 "relevant_summaries": relevant_summaries,
                 "current_step": "rag_embeddings_processed"
             }
