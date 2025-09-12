@@ -5,6 +5,7 @@
 import logging
 from typing import Dict, Literal
 from models.state import MeetingQAState
+from utils.content_filter import detect_content_filter, create_safe_response
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,14 @@ class QualityEvaluator:
             
         except Exception as e:
             logger.error(f"답변 품질 평가 실패: {str(e)}")
+            
+            # Azure 콘텐츠 필터 감지
+            filter_info = detect_content_filter(e)
+            if filter_info['is_filtered']:
+                logger.warning(f"품질 평가 중 콘텐츠 필터 감지: {filter_info}")
+                return create_safe_response(state, 'quality_evaluation', filter_info)
+            
+            # 일반적인 오류 처리
             return {
                 **state,
                 "answer_quality_score": 3,  # 기본값

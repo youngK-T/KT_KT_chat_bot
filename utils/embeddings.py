@@ -3,6 +3,7 @@ from typing import List, Dict
 import numpy as np
 import logging
 from config.settings import AZURE_OPENAI_CONFIG, AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+from config.settings import AZURE_OPENAI_CONFIG, AZURE_OPENAI_EMBEDDING_DEPLOYMENT
 
 logger = logging.getLogger(__name__)
 

@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List
 from langchain_core.prompts import ChatPromptTemplate
 from models.state import MeetingQAState
+from utils.content_filter import detect_content_filter, create_safe_response
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,15 @@ class QuestionProcessor:
             user_question = state.get("user_question", "")
             if not user_question:
                 raise ValueError("user_question이 비어 있습니다.")
+            
+            # 이미 메모리로 강화된 질문이 있으면 그대로 사용
+            existing_processed = state.get("processed_question", "")
+            if existing_processed and existing_processed != user_question:
+                logger.info("메모리로 강화된 질문 사용")
+                return {
+                    **state,
+                    "current_step": "question_processed"
+                }
 
             # 질문 전처리 프롬프트
             question_process_prompt = ChatPromptTemplate.from_template(
@@ -33,40 +43,30 @@ class QuestionProcessor:
                 전처리된 질문을 출력해주세요:'''
             )
             
-            # 키워드 추출 프롬프트  
-            keyword_extract_prompt = ChatPromptTemplate.from_template(
-                '''당신은 회의록 검색을 위한 키워드를 추출하는 AI입니다.
-                다음 질문에서 검색에 중요한 핵심 키워드를 5~8개 추출해주세요.
-                
-                질문: {processed_question}
-                
-                핵심 키워드만 쉼표로 구분해서 출력해주세요:'''
-            )
 
             # 질문 전처리 실행
             formatted_question_prompt = question_process_prompt.format(user_question=user_question)
             question_response = self.llm.invoke(formatted_question_prompt)
             processed_question = question_response.content.strip()
             
-            # 키워드 추출 실행
-            formatted_keyword_prompt = keyword_extract_prompt.format(processed_question=processed_question)
-            keyword_response = self.llm.invoke(formatted_keyword_prompt)
-            keywords_text = keyword_response.content.strip()
-            
-            # 키워드 파싱
-            search_keywords = [kw.strip() for kw in keywords_text.split(',') if kw.strip()]
-            
-            logger.info(f"질문 전처리 완료: {len(search_keywords)}개 키워드 추출")
+            logger.info(f"질문 전처리 완료: '{processed_question}'")
             
             return {
                 **state,
                 "processed_question": processed_question,
-                "search_keywords": search_keywords,
                 "current_step": "question_processed"
             }
             
         except Exception as e:
             logger.error(f"질문 전처리 실패: {str(e)}")
+            
+            # Azure 콘텐츠 필터 감지 (오류 코드 우선)
+            filter_info = detect_content_filter(e)
+            if filter_info['is_filtered']:
+                logger.warning(f"질문 전처리 중 콘텐츠 필터 감지: {filter_info}")
+                return create_safe_response(state, 'question_processing', filter_info)
+            
+            # 일반적인 오류 처리
             return {
                 **state,
                 "error_message": f"질문 전처리 실패: {str(e)}",

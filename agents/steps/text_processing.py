@@ -26,9 +26,17 @@ class TextProcessor:
                 raise ValueError("원본 스크립트가 없습니다.")
             
             all_chunked_scripts = []
+            processed_script_ids = set()  # 중복 처리 방지
             
             for script in original_scripts:
                 script_id = script["script_id"]
+                
+                # 이미 처리된 스크립트 건너뛰기
+                if script_id in processed_script_ids:
+                    logger.debug(f"이미 처리된 스크립트 건너뛰기: {script_id}")
+                    continue
+                processed_script_ids.add(script_id)
+                
                 full_content = script["content"]
                 
                 # 텍스트 정리
@@ -50,8 +58,9 @@ class TextProcessor:
             
             logger.info(f"스크립트 처리 완료: {len(all_chunked_scripts)}개 청크 생성")
             
+            
             return {
-                **state,
+                **state,  # 이미 script_metadata가 포함되어 있어야 함
                 "chunked_scripts": all_chunked_scripts,
                 "current_step": "scripts_processed"
             }
@@ -85,7 +94,7 @@ class TextProcessor:
                 query_embedding=query_embedding,
                 chunks=chunked_scripts,
                 top_k=10,
-                similarity_threshold=0.6
+                similarity_threshold=0.4  # 0.6에서 0.4로 낮춤
             )
             
             logger.info(f"관련 청크 선별 완료: {len(relevant_chunks)}개 청크")
@@ -139,8 +148,9 @@ class TextProcessor:
             
             logger.info(f"RAG 임베딩 기반 검색 완료: {len(relevant_summaries)}개 요약본")
             
+            
             return {
-                **state,
+                **state,  # script_metadata 포함되어 있어야 함
                 "relevant_summaries": relevant_summaries,
                 "current_step": "rag_embeddings_processed"
             }

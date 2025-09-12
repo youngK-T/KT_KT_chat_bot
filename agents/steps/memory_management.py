@@ -5,6 +5,7 @@
 import logging
 from typing import Dict
 from models.state import MeetingQAState
+from utils.content_filter import detect_content_filter, create_safe_response
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,14 @@ class MemoryManager:
             
         except Exception as e:
             logger.error(f"대화 요약 실패: {str(e)}")
+            
+            # Azure 콘텐츠 필터 감지
+            filter_info = detect_content_filter(e)
+            if filter_info['is_filtered']:
+                logger.warning(f"메모리 요약 중 콘텐츠 필터 감지: {filter_info}")
+                return create_safe_response(state, 'memory_management', filter_info)
+            
+            # 일반적인 오류 처리
             return {
                 **state,
                 "conversation_memory": state.get("conversation_memory", "") or "",

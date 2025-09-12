@@ -27,12 +27,16 @@ class ScriptFetcher:
         """
         try:
             selected_script_ids = state.get("selected_script_ids", [])
+            
             if not selected_script_ids:
                 raise ValueError("selected_script_ids가 없습니다.")
 
+            # API 호출
+            params = {"ids": ",".join(selected_script_ids)}
+            api_url = f"{self.meeting_api_url}/api/scripts"
+
             with httpx.Client(timeout=30) as client:
-                params = {"ids": ",".join(selected_script_ids)}
-                response = client.get(f"{self.meeting_api_url}/api/scripts", params=params)
+                response = client.get(api_url, params=params)
                 if response.status_code != 200:
                     raise Exception(f"API 호출 실패: {response.status_code}")
                 result = response.json()
@@ -49,12 +53,20 @@ class ScriptFetcher:
                         by_id[str(sid)] = it
             items = [by_id[sid] for sid in selected_script_ids if sid in by_id]
             original_scripts = []
+            seen_script_ids = set()  # 중복 방지용 집합
+            
             for item in items:
                 if not isinstance(item, dict):
                     continue
                 script_id = item.get("scriptId") or item.get("id") or item.get("meeting_id")
                 if not script_id:
                     continue
+                
+                # 중복 스크립트 ID 건너뛰기
+                if script_id in seen_script_ids:
+                    logger.debug(f"중복된 스크립트 ID 건너뛰기: {script_id}")
+                    continue
+                seen_script_ids.add(script_id)
 
                 # 1) 기본: scriptText 사용
                 script_text = item.get("scriptText")
@@ -77,10 +89,17 @@ class ScriptFetcher:
                         script_text = "\n".join(lines)
 
                 script_text = script_text or ""
-
+                
+                # 제목과 타임스탬프 추출 (디버깅 로그 추가)
+                title = item.get("title", "")
+                timestamp = item.get("timestamp", "")
+                
+                
                 original_scripts.append({
                     "script_id": script_id,
                     "content": script_text,
+                    "title": title,
+                    "timestamp": timestamp,  # 추가 (날짜 정보)
                     "filename": f"meeting_{script_id}.txt"
                 })
             
