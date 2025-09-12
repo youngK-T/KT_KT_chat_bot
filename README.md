@@ -62,45 +62,50 @@ sequenceDiagram
     U->>C: POST /api/chat/query<br/>{"question": "...", "user_selected_script_ids": []}
     C->>A: 상태 초기화 & Agent 실행
     
-    A->>A: 1️⃣ 질문 전처리 & 키워드 추출
-    A->>AI: 질문 개선 요청 (GPT-4o-mini)
-    AI-->>A: 전처리된 질문
+    A->>A: 1️⃣ 대화 메모리 요약 (summarize_memory)
+    A->>AI: 이전 대화 맥락 요약 (GPT-4o-mini)
+    AI-->>A: 요약된 대화 메모리
     
+    A->>A: 2️⃣ 질문 강화 (enhance_question)
+    A->>AI: 메모리 기반 질문 개선 (GPT-4o-mini)
+    AI-->>A: 강화된 질문
+    
+    A->>A: 3️⃣ 질문 전처리 (process_question)
     A->>AI: 질문 임베딩 생성 (text-embedding-ada-002)
     AI-->>A: 질문 벡터 [0.1, 0.2, ...]
     
     alt 기본 챗봇 (전체 검색)
-        A->>R: GET /api/rag/script-summaries
+        A->>R: GET /api/rag/script-summaries (search_rag)
         R-->>A: 전체 요약본 임베딩
     else 상세 챗봇 (특정 검색)  
-        A->>R: GET /api/rag/script-summaries?scriptIds=a,b,c
+        A->>R: GET /api/rag/script-summaries?scriptIds=a,b,c (get_specific_summary)
         R-->>A: 특정 요약본 임베딩
     end
     
-    A->>A: 2️⃣ 코사인 유사도 계산 & 상위 K개 선별
+    A->>A: 4️⃣ 코사인 유사도 계산 & 상위 K개 선별
     
-    A->>S: GET /api/scripts?ids=selected_ids
+    A->>S: GET /api/scripts?ids=selected_ids (fetch_scripts)
     S-->>A: 원본 회의록 텍스트
     
-    A->>A: 3️⃣ LangChain 청킹 & 임베딩
+    A->>A: 5️⃣ LangChain 청킹 & 임베딩 (process_scripts)
     A->>AI: 청크 임베딩 생성 (text-embedding-ada-002)
     AI-->>A: 청크 벡터들
     
-    A->>A: 4️⃣ 관련 청크 선별 (유사도 기반)
+    A->>A: 6️⃣ 관련 청크 선별 (select_chunks)
     
-    A->>AI: 답변 생성 요청 (GPT-4o-mini)
+    A->>AI: 답변 생성 요청 (generate_answer)
     AI-->>A: 초기 답변
     
-    A->>AI: 답변 품질 평가 (GPT-4o-mini)  
+    A->>AI: 답변 품질 평가 (evaluate_answer)
     AI-->>A: 품질 점수 (1-5)
     
     opt 품질 3점 미만시
-        A->>AI: 답변 개선 요청 (GPT-4o-mini)
+        A->>AI: 답변 개선 요청 (improve_answer)
         AI-->>A: 개선된 답변
     end
     
     A-->>C: 최종 상태 반환
-    C-->>U: JSON 응답<br/>{"answer": "...", "sources": [...], "confidence_score": 0.88}
+    C-->>U: JSON 응답<br/>{"final_answer": "...", "sources": [...], "confidence_score": 0.88}
 ```
 
 ---
@@ -300,62 +305,80 @@ curl -X POST "http://localhost:8000/api/chat/query" \
 
 ```mermaid
 graph TD
-    A[사용자 질문] --> B[대화 메모리 요약]
-    B --> C[질문 강화]
-    C --> D[질문 전처리]
+    A[사용자 질문] --> B[summarize_memory]
+    B --> C[enhance_question]
+    C --> D[process_question]
     D --> E{검색 모드 분기}
     
-    E -->|기본 챗봇| F[전체 RAG 검색]
-    E -->|상세 챗봇| G[특정 RAG 검색]
+    E -->|기본 챗봇| F[search_rag]
+    E -->|상세 챗봇| G[get_specific_summary]
     
-    F --> H[원본 스크립트 조회]
+    F --> H[fetch_scripts]
     G --> H
     
-    H --> I[텍스트 청킹 & 임베딩]
-    I --> J[관련 청크 선별]
-    J --> K[답변 생성]
-    K --> L[품질 평가]
+    H --> I[process_scripts]
+    I --> J[select_chunks]
+    J --> K[generate_answer]
+    K --> L[evaluate_answer]
     
-    L -->|품질 부족| M[답변 개선]
-    L -->|품질 양호| N[최종 답변]
+    L -->|품질 부족| M[improve_answer]
+    L -->|품질 양호| N[END]
     M --> N
 ```
 
 ### 📊 **각 단계별 상세 설명**
 
-#### 1️⃣ **질문 전처리** (`question_processing.py`)
+#### 1️⃣ **대화 메모리 요약** (`summarize_memory`)
+- **목적**: 이전 대화 맥락을 요약하여 현재 질문에 반영
+- **처리**: 대화 히스토리 분석 및 핵심 정보 추출
+- **출력**: `conversation_memory`
+
+#### 2️⃣ **질문 강화** (`enhance_question`)
+- **목적**: 메모리 정보를 활용하여 질문을 더 명확하게 개선
+- **처리**: 이전 대화 맥락과 결합한 질문 생성
+- **출력**: `processed_question`
+
+#### 3️⃣ **질문 전처리** (`process_question`)
 - **목적**: 검색 최적화를 위한 질문 명확화
 - **처리**: 키워드 추출, 의도 분석, 검색 쿼리 최적화
 - **출력**: `processed_question`, `search_keywords`
 
-#### 2️⃣ **RAG 검색** (`rag_search.py`)
+#### 4️⃣ **RAG 검색** (`search_rag` / `get_specific_summary`)
 - **기본 모드**: `GET /api/rag/script-summaries` (전체 조회)
 - **상세 모드**: `GET /api/rag/script-summaries?scriptIds=a,b,c` (다중 필터)
 - **처리**: 코사인 유사도 계산, 상위 K개 선별
 - **출력**: `relevant_summaries`, `selected_script_ids`
 
-#### 3️⃣ **원본 스크립트 조회** (`script_fetch.py`)
+#### 5️⃣ **원본 스크립트 조회** (`fetch_scripts`)
 - **API 호출**: `GET /api/scripts?ids=a,b,c` (쉼표 구분 다중 조회)
 - **처리**: `scriptText` 추출 또는 `segments` 파싱
 - **출력**: `original_scripts`
 
-#### 4️⃣ **텍스트 처리** (`text_processing.py`)
+#### 6️⃣ **텍스트 처리** (`process_scripts`)
 - **청킹**: LangChain `RecursiveCharacterTextSplitter` 사용
 - **임베딩**: Azure OpenAI `text-embedding-ada-002`
-- **선별**: 질문과의 코사인 유사도 기반 Top-K
-- **출력**: `chunked_scripts`, `relevant_chunks`
+- **출력**: `chunked_scripts`
 
-#### 5️⃣ **답변 생성** (`answer_generation.py`)
+#### 7️⃣ **관련 청크 선별** (`select_chunks`)
+- **선별**: 질문과의 코사인 유사도 기반 Top-K
+- **출력**: `relevant_chunks`
+
+#### 8️⃣ **답변 생성** (`generate_answer`)
 - **프롬프트**: 추출 기반 답변 생성 (엄격한 규칙)
 - **제약**: 5문장 이내, 추측 금지, 출처 명시 필수
 - **모델**: GPT-4o-mini (temperature=1, seed=1)
 - **출력**: `final_answer`, `sources`, `used_script_ids`
 - **특징**: 간소화된 구조로 안정성 향상
 
-#### 6️⃣ **품질 평가** (`quality_evaluation.py`)
+#### 9️⃣ **품질 평가** (`evaluate_answer`)
 - **평가 기준**: 정확성, 완성도, 관련성 (1-5점)
 - **개선 조건**: 3점 미만 시 1회 개선 시도
 - **출력**: `answer_quality_score`, `improvement_attempts`
+
+#### 🔟 **답변 개선** (`improve_answer`)
+- **목적**: 품질이 낮은 답변을 개선
+- **처리**: 기존 답변을 참고 자료로 활용하여 재생성
+- **출력**: `final_answer` (개선된 버전)
 
 ---
 
