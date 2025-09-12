@@ -117,6 +117,7 @@ def create_safe_response(state: Dict[str, Any], step_name: str, filter_info: Dic
         return {
             **state,
             "final_answer": safe_message,
+            "evidence_quotes": state.get("evidence_quotes", []) if step_name == 'improve_answer' else [],
             "sources": state.get("sources", []) if step_name == 'improve_answer' else [],
             "used_script_ids": state.get("used_script_ids", []) if step_name == 'improve_answer' else [],
             "confidence_score": 0.0,
@@ -128,6 +129,7 @@ def create_safe_response(state: Dict[str, Any], step_name: str, filter_info: Dic
         return {
             **state,
             "final_answer": safe_message,
+            "evidence_quotes": [],
             "answer_quality_score": 0,
             "confidence_score": 0.0,
             "content_filter_triggered": True,
@@ -138,7 +140,6 @@ def create_safe_response(state: Dict[str, Any], step_name: str, filter_info: Dic
         return {
             **state,
             "processed_question": state.get("user_question", ""),
-            "search_keywords": [],
             "content_filter_triggered": True,
             "current_step": "content_filter_detected"
         }

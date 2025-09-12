@@ -49,7 +49,6 @@ async def process_meeting_question(
         initial_state: MeetingQAState = {
             "user_question": request.question,
             "processed_question": "",
-            "search_keywords": [],
             "user_selected_script_ids": request.user_selected_script_ids,
             "relevant_summaries": [],
             "selected_script_ids": [],
@@ -94,7 +93,8 @@ async def process_meeting_question(
             ]
             
             response = MeetingQAResponse(
-                answer="Azure 콘텐츠 필터에 따라 해당 내용의 답을 할 수 없습니다.",
+                final_answer="Azure 콘텐츠 필터에 따라 해당 내용의 답을 할 수 없습니다.",
+                evidence_quotes=[],
                 sources=[],
                 confidence_score=0.0,
                 processing_steps=processing_steps,
@@ -113,7 +113,8 @@ async def process_meeting_question(
             
             # 응답 생성
             response = MeetingQAResponse(
-                answer=str(final_state.get("final_answer") or "답변을 생성할 수 없습니다."),
+                final_answer=str(final_state.get("final_answer") or "답변을 생성할 수 없습니다."),
+                evidence_quotes=final_state.get("evidence_quotes") or [],
                 sources=final_state.get("sources") or [],
                 confidence_score=float(final_state.get("confidence_score") or 0.0),
                 processing_steps=processing_steps,
