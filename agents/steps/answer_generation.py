@@ -3,6 +3,7 @@
 """
 
 import json
+import math
 import re
 import logging
 from typing import Dict, List, Tuple
@@ -124,43 +125,52 @@ class AnswerGenerator:
         return list(seen_scripts.values())
     
     def _calculate_confidence(self, relevant_chunks: List[Dict]) -> float:
-        """신뢰도 계산 개선 - 품질, 개수, 안정성 반영"""
+        """개선된 신뢰도 계산: 스케일 감지/정규화, 안정성(exp), 보너스는 남은 여지에 비례"""
         if not relevant_chunks:
-            return 0.1  # 관련 청크가 없으면 매우 낮음
-        
-        chunk_count = len(relevant_chunks)
-        top_chunks = relevant_chunks[:5]  # 상위 5개 사용 (조금 넓힘)
-        scores = [c.get("relevance_score", 0.0) for c in top_chunks]
+            return 0.1
 
-        # 1. 품질 (기본: 평균 점수)
+        chunk_count = len(relevant_chunks)
+        top_chunks = relevant_chunks[:5]
+        raw_scores = [c.get("relevance_score", 0.0) for c in top_chunks]
+
+        # --- 스케일 감지 및 정규화 ---
+        max_raw = max(raw_scores)
+        if max_raw > 1.0:
+            # 관측된 최대값으로 정규화 (0..1 로 매핑)
+            scores = [s / float(max_raw) for s in raw_scores]
+            normalized_by = f"max_raw({max_raw})"
+        else:
+            scores = raw_scores[:]
+            normalized_by = "none"
+
         avg_score = sum(scores) / len(scores)
         max_score = max(scores)
-        
-        # 2. 개수 효과 (개수가 많을수록 ↑, 단 최대 제한)
-        count_bonus = min(0.2, chunk_count * 0.04)  # 최대 0.2
-        
-        # 3. 안정성 (점수 분산으로 평가)
+
+        # --- 안정성(exp 감소) ---
         if len(scores) > 1:
             variance = sum((s - avg_score) ** 2 for s in scores) / len(scores)
-            stability_factor = max(0.8, 1 - variance)  # 분산 클수록 불안정
         else:
-            stability_factor = 1.0
-        
-        # 4. 최종 신뢰도
-        raw_confidence = (avg_score * 0.7 + max_score * 0.3)  # 평균 위주 + 최고치 가중치
-        raw_confidence = raw_confidence * stability_factor + count_bonus
-        
-        # 보정 범위 (0.2 ~ 0.9 사이)
-        confidence = max(0.2, min(0.9, raw_confidence))
-        
+            variance = 0.0
+        stability = math.exp(-1.5 * variance)  # 1.5는 튜닝 가능한 상수
+        stability = max(0.35, min(1.0, stability))  # 하한/상한
+
+        # --- 기본 신뢰도 (가중 평균에 stability 적용) ---
+        base = (avg_score * 0.7 + max_score * 0.3) * stability
+
+        # --- 청크 개수 보너스 (덧셈 대신 '남은 여지'에 비례) ---
+        count_bonus = min(0.15, max(0.0, (chunk_count - 1) * 0.03))
+        confidence = base + (1 - base) * count_bonus
+
+        # --- 최종 클램프 ---
+        confidence = max(0.05, min(0.95, confidence))
+
         logger.debug(
-            f"신뢰도 계산: avg={avg_score:.3f}, max={max_score:.3f}, "
-            f"variance={variance:.3f}, stability={stability_factor:.3f}, "
-            f"count_bonus={count_bonus:.3f}, raw={raw_confidence:.3f}, "
-            f"final={confidence:.3f}"
+            f"신뢰도 계산: raw_scores={raw_scores}, normalized_by={normalized_by}, scores={scores}, "
+            f"avg={avg_score:.3f}, max={max_score:.3f}, variance={variance:.5f}, stability={stability:.3f}, "
+            f"base={base:.3f}, count_bonus={count_bonus:.3f}, final={comfidence:.3f}"
         )
-        
-        return confidence
+
+        return confidence  
     
     def _convert_quotes_to_evidence(self, quotes: List[Dict], relevant_chunks: List[Dict], original_scripts: List[Dict]) -> List[Dict]:
         """구조화된 quotes를 evidence_quotes 형식으로 변환 (안정적인 정렬 적용)"""
