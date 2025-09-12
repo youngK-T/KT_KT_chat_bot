@@ -448,11 +448,11 @@ DEFAULT_CHUNK_OVERLAP = 200              # 청크 간 중복 크기
 
 **JavaScript 콘솔 테스트:**
 ```javascript
-fetch('https://your-app.azurewebsites.net/api/chat/query', {
+fetch('https://chat-bot001-dbcredbkhqbsc4fn.koreacentral-01.azurewebsites.net//api/chat/query', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    question: '테스트 질문입니다',
+    question: '악수는 상사랑 어떻게 해?',
     user_selected_script_ids: []
   })
 }).then(r => r.json()).then(console.log);
