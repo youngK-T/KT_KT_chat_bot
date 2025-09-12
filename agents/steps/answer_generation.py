@@ -125,49 +125,54 @@ class AnswerGenerator:
         return list(seen_scripts.values())
     
     def _calculate_confidence(self, relevant_chunks: List[Dict]) -> float:
-        """개선된 신뢰도 계산: 스케일 감지/정규화, 안정성(exp), 보너스는 남은 여지에 비례"""
+        """개선된 신뢰도 계산: 청크 품질에 따른 큰 차이 반영"""
         if not relevant_chunks:
-            return 0.1
+            return 0.05  # 관련 청크가 없으면 매우 낮음
 
         chunk_count = len(relevant_chunks)
         top_chunks = relevant_chunks[:5]
         raw_scores = [c.get("relevance_score", 0.0) for c in top_chunks]
 
-        # --- 스케일 감지 및 정규화 ---
+        # --- 스케일 감지 및 정규화 (더 극단적으로) ---
         max_raw = max(raw_scores)
-        if max_raw > 1.0:
-            # 관측된 최대값으로 정규화 (0..1 로 매핑)
-            scores = [s / float(max_raw) for s in raw_scores]
-            normalized_by = f"max_raw({max_raw})"
+        if max_raw > 0.7:
+            # 0.7~1.0을 0.0~1.0으로 정규화
+            scores = [(s - 0.7) / 0.3 for s in raw_scores]
+            normalized_by = "cosine_similarity"
         else:
             scores = raw_scores[:]
             normalized_by = "none"
 
         avg_score = sum(scores) / len(scores)
         max_score = max(scores)
+        min_score = min(scores)
 
-        # --- 안정성(exp 감소) ---
-        if len(scores) > 1:
-            variance = sum((s - avg_score) ** 2 for s in scores) / len(scores)
-        else:
-            variance = 0.0
-        stability = math.exp(-1.5 * variance)  # 1.5는 튜닝 가능한 상수
-        stability = max(0.35, min(1.0, stability))  # 하한/상한
-
-        # --- 기본 신뢰도 (가중 평균에 stability 적용) ---
-        base = (avg_score * 0.7 + max_score * 0.3) * stability
-
-        # --- 청크 개수 보너스 (덧셈 대신 '남은 여지'에 비례) ---
-        count_bonus = min(0.15, max(0.0, (chunk_count - 1) * 0.03))
-        confidence = base + (1 - base) * count_bonus
-
-        # --- 최종 클램프 ---
-        confidence = max(0.05, min(0.95, confidence))
+        # --- 품질 차이를 극대화 ---
+        # 1. 평균과 최고점의 차이를 크게 반영
+        quality_gap = max_score - avg_score
+        quality_factor = 1.0 + (quality_gap * 2.0)  # 차이가 클수록 1.0~3.0 범위
+        
+        # 2. 최저점도 고려 (일관성)
+        consistency_factor = 1.0 - (avg_score - min_score) * 0.5  # 0.5~1.0 범위
+        
+        # 3. 청크 개수 효과를 크게 (최대 0.4)
+        count_bonus = min(0.4, max(0.0, (chunk_count - 1) * 0.08))
+        
+        # 4. 기본 신뢰도 (품질 차이 반영)
+        base = (avg_score * 0.6 + max_score * 0.4) * quality_factor * consistency_factor
+        
+        # 5. 청크 개수 보너스 (덧셈 대신 곱셈으로)
+        confidence = base * (1.0 + count_bonus)
+        
+        # 6. 최종 클램프 (더 넓은 범위)
+        confidence = max(0.02, min(0.98, confidence))
 
         logger.debug(
-            f"신뢰도 계산: raw_scores={raw_scores}, normalized_by={normalized_by}, scores={scores}, "
-            f"avg={avg_score:.3f}, max={max_score:.3f}, variance={variance:.5f}, stability={stability:.3f}, "
-            f"base={base:.3f}, count_bonus={count_bonus:.3f}, confidence={confidence:.3f}"
+            f"신뢰도 계산: raw_scores={raw_scores}, scores={scores}, "
+            f"avg={avg_score:.3f}, max={max_score:.3f}, min={min_score:.3f}, "
+            f"quality_gap={quality_gap:.3f}, quality_factor={quality_factor:.3f}, "
+            f"consistency_factor={consistency_factor:.3f}, count_bonus={count_bonus:.3f}, "
+            f"base={base:.3f}, confidence={confidence:.3f}"
         )
 
         return confidence  
