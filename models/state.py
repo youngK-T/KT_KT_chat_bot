@@ -15,8 +15,6 @@ class MeetingQAState(TypedDict):
     original_scripts: List[Dict]  # 외부 API에서 받은 원본 스크립트들
     # [{"script_id": "...", "content": "...", "title": "...", "timestamp": "...", "filename": "..."}]
     
-    script_metadata: Dict[str, Dict]  # 프론트엔드용 제목 정보 (script_id -> metadata)
-    # {"script_id": {"title": "회의 제목", "timestamp": "2025-09-10T10:42:47.385515099"}}
     # 원본 스크립트 처리 단계
     chunked_scripts: List[Dict]  # 청킹된 원본들
     # [{"script_id": "...", "chunk_text": "...", "chunk_index": 0, "chunk_embedding": [...]}]
@@ -26,7 +24,17 @@ class MeetingQAState(TypedDict):
     
     # 답변 생성 단계
     context_chunks: List[str]  # 요약본 + 관련 원본 청크 조합
-    final_answer: str  # 최종 답변
+    final_answer: str  # 최종 답변 (순수 답변만, 근거 제외)
+    evidence_quotes: List[Dict]  # 근거 인용문들
+    # [{
+    #   "quote": "밝은 미소를 좀 지으면서 이제 안녕하세요 하는게 이제 기본적인 거고요",
+    #   "speaker": "화자01",
+    #   "script_id": "86b3e1e5-509a-46ca-bf72-6bba3d34e871",
+    #   "meeting_title": "kt회의",
+    #   "meeting_date": "2025-09-10T10:42:47.385515099",
+    #   "chunk_index": 0,
+    #   "relevance_score": 0.83
+    # }]
     sources: List[Dict]  # 출처 정보 (청킹 관련 정보만)
     # [{"script_id": "...", "chunk_index": 0, "relevance_score": 0.9}]
     confidence_score: float  # 답변 신뢰도

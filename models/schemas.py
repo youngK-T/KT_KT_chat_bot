@@ -7,17 +7,26 @@ class MeetingQARequest(BaseModel):
     user_selected_script_ids: List[str] = Field(default=[], description="사용자가 선택한 스크립트 ID 목록")
 
 class SourceInfo(BaseModel):
-    """출처 정보 모델"""
+    """출처 정보 모델 (청킹 관련 정보만)"""
     script_id: str = Field(..., description="스크립트 ID")
-    meeting_title: Optional[str] = Field(default="", description="회의 제목")
-    meeting_date: Optional[str] = Field(default="", description="회의 날짜")
-    chunk_index: Optional[int] = Field(None, description="청크 인덱스")
+    chunk_index: int = Field(..., description="청크 인덱스")
+    relevance_score: float = Field(..., description="관련성 점수", ge=0.0, le=1.0)
+
+class EvidenceQuote(BaseModel):
+    """근거 인용문 모델"""
+    quote: str = Field(..., description="인용문 내용")
+    speaker: str = Field(..., description="발언자 (예: 화자01)")
+    script_id: str = Field(..., description="스크립트 ID")
+    meeting_title: str = Field(..., description="회의 제목")
+    meeting_date: str = Field(..., description="회의 날짜")
+    chunk_index: int = Field(..., description="청크 인덱스")
     relevance_score: float = Field(..., description="관련성 점수", ge=0.0, le=1.0)
 
 class MeetingQAResponse(BaseModel):
     """회의록 QA 응답 모델"""
-    answer: str = Field(..., description="최종 답변")
-    sources: List[SourceInfo] = Field(..., description="출처 정보 목록")
+    final_answer: str = Field(..., description="최종 답변 (순수 텍스트, 인용문 제외)")
+    evidence_quotes: List[EvidenceQuote] = Field(default_factory=list, description="근거 인용문 목록")
+    sources: List[SourceInfo] = Field(..., description="출처 정보 목록 (청킹 관련)")
     confidence_score: float = Field(..., description="답변 신뢰도", ge=0.0, le=1.0)
     processing_steps: List[str] = Field(..., description="처리 단계 로그")
     used_script_ids: List[str] = Field(default_factory=list, description="최종 답변에 실제로 사용된 문서 ID 목록")

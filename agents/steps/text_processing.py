@@ -94,7 +94,7 @@ class TextProcessor:
                 query_embedding=query_embedding,
                 chunks=chunked_scripts,
                 top_k=10,
-                similarity_threshold=0.6
+                similarity_threshold=0.4  # 0.6에서 0.4로 낮춤
             )
             
             logger.info(f"관련 청크 선별 완료: {len(relevant_chunks)}개 청크")

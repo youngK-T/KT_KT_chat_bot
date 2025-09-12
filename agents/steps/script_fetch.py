@@ -103,20 +103,11 @@ class ScriptFetcher:
                     "filename": f"meeting_{script_id}.txt"
                 })
             
-            # 제목 매핑 딕셔너리 생성 (프론트엔드 출처 표시용)
-            script_metadata = {}
-            for script in original_scripts:
-                script_metadata[script["script_id"]] = {
-                    "title": script["title"],
-                    "timestamp": script["timestamp"]
-                }
-            
             logger.info(f"원본 스크립트 다운로드 완료: {len(original_scripts)}개 파일")
             
             return {
                 **state,
                 "original_scripts": original_scripts,
-                "script_metadata": script_metadata,  # 제목 매핑 딕셔너리 추가
                 "current_step": "scripts_fetched"
             }
             
