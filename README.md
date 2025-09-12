@@ -3,7 +3,7 @@
 > **MSA 기반 회의록 질의응답 시스템**  
 > RAG(Retrieval Augmented Generation)와 Azure OpenAI를 활용한 지능형 회의록 검색 및 답변 생성 서비스
 
-[![Version](https://img.shields.io/badge/version-2.2.1-blue.svg)](https://github.com/youngK-T/KT_KT_chat_bot.git)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/youngK-T/KT_KT_chat_bot.git)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-red.svg)](https://fastapi.tiangolo.com)
 [![LangChain](https://img.shields.io/badge/LangChain-0.2.16-orange.svg)](https://langchain.com)
@@ -108,9 +108,10 @@ sequenceDiagram
 ## ✨ 주요 기능
 
 ### 🎯 **지능형 질의응답**
-- **상황 인식**: 회의록 맥락을 이해한 정확한 답변
+- **추출형 답변**: 회의록 내용에서 직접 인용하거나 요약만 허용
 - **출처 추적**: 답변 근거가 된 문서와 위치 제공
 - **신뢰도 점수**: AI가 자체 평가한 답변 품질 지표
+- **일관성 보장**: 동일한 질문에 대해 일관된 답변 생성
 
 ### 🔍 **이중 검색 모드**
 - **기본 챗봇**: 전체 회의록에서 관련 내용 검색
@@ -120,6 +121,7 @@ sequenceDiagram
 - **단계별 처리**: 질문 전처리 → RAG → 원본 조회 → 청킹 → 답변
 - **품질 관리**: 답변 평가 후 자동 개선 시도
 - **메모리 관리**: 대화 맥락 유지 및 요약
+- **안정적 정렬**: 청크와 요약본의 일관된 순서 보장
 
 ### 🔄 **LangGraph 기반 워크플로우**
 - **조건부 분기**: 사용자 선택에 따른 동적 경로
@@ -251,26 +253,32 @@ curl -X POST "http://localhost:8000/api/chat/query" \
 **응답 스키마:**
 ```json
 {
-  "answer": "AI가 생성한 답변 텍스트",
-  "sources": [
+  "final_answer": "string",
+  "evidence_quotes": [
     {
-      "script_id": "회의록 식별자",
-      "meeting_title": "회의 제목 (선택사항)",
-      "meeting_date": "회의 날짜 (선택사항)",
-      "chunk_index": 3,
-      "relevance_score": 0.95
+      "quote": "string",
+      "speaker": "string",
+      "script_id": "string",
+      "meeting_title": "string",
+      "meeting_date": "string",
+      "chunk_index": 0,
+      "relevance_score": 1
     }
   ],
-  "confidence_score": 0.88,
-  "processing_steps": [
-    "질문 전처리 완료",
-    "RAG 검색 완료: 3개 관련 요약본 발견",
-    "원본 스크립트 조회 완료: 2개",
-    "청킹 및 임베딩 완료: 15개 청크 생성",
-    "관련 청크 선별 완료: 5개 청크 선택",
-    "최종 답변 생성 완료"
+  "sources": [
+    {
+      "script_id": "string",
+      "chunk_index": 0,
+      "relevance_score": 1
+    }
   ],
-  "used_script_ids": ["script_id_1", "script_id_2"]
+  "confidence_score": 1,
+  "processing_steps": [
+    "string"
+  ],
+  "used_script_ids": [
+    "string"
+  ]
 }
 ```
 
@@ -339,9 +347,10 @@ graph TD
 
 #### 5️⃣ **답변 생성** (`answer_generation.py`)
 - **프롬프트**: 추출 기반 답변 생성 (엄격한 규칙)
-- **제약**: 최대 512토큰, 출처 명시 필수
+- **제약**: 5문장 이내, 추측 금지, 출처 명시 필수
 - **모델**: GPT-4o-mini (temperature=1, seed=1)
 - **출력**: `final_answer`, `sources`, `used_script_ids`
+- **특징**: 간소화된 구조로 안정성 향상
 
 #### 6️⃣ **품질 평가** (`quality_evaluation.py`)
 - **평가 기준**: 정확성, 완성도, 관련성 (1-5점)
@@ -356,13 +365,16 @@ graph TD
 
 ```bash
 # 로컬 빌드
-docker build -t chatbot-api .
+docker build -t syjeong24601/chat-bot001:v1.0.0 .
 
 # 멀티플랫폼 빌드 (Azure App Service 호환)
-docker buildx build --platform linux/amd64 -t chatbot-api .
+docker buildx build \
+  --platform linux/amd64 \
+  -t syjeong24601/chat-bot001:v1.0.0 \
+  --push .
 
 # 실행
-docker run -p 8000:8000 chatbot-api
+docker run -p 8000:8000 syjeong24601/chat-bot001:v1.0.0
 ```
 
 ### ☁️ **Azure 배포**
@@ -373,28 +385,10 @@ docker run -p 8000:8000 chatbot-api
 3. Azure Web App 자동 배포
 
 **수동 배포:**
-```bash
-# Azure CLI 로그인
-az login
-
-# 컨테이너 배포
-az webapp config container set \
-  --name your-webapp-name \
-  --resource-group your-resource-group \
-  --docker-custom-image-name your-dockerhub-username/chatbot-api:latest
-```
+Azure Container에 이미지 삽입
 
 ### 📋 **환경변수 설정 (Azure)**
-```bash
-az webapp config appsettings set \
-  --name your-webapp-name \
-  --resource-group your-resource-group \
-  --settings \
-    AZURE_OPENAI_API_KEY="your-key" \
-    AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/" \
-    RAG_SERVICE_URL="https://your-rag-service.azurewebsites.net" \
-    MEETING_API_URL="https://your-script-service.azurewebsites.net"
-```
+Azure Portal에서 진행행
 
 ---
 
@@ -421,51 +415,11 @@ DEFAULT_CHUNK_SIZE = 1000                # 텍스트 청크 크기
 DEFAULT_CHUNK_OVERLAP = 200              # 청크 간 중복 크기
 ```
 
-### 🔗 **외부 서비스 요구사항**
 
-#### **RAG 서비스 API**
-```
-GET /api/rag/script-summaries              # 전체 요약본 조회
-GET /api/rag/script-summaries?scriptIds=a,b,c  # 다중 조회
 
-응답 형식:
-[
-  {
-    "scriptId": "string",
-    "embedding": [0.1, 0.2, ...]
-  }
-]
-```
-
-#### **회의록 서비스 API**
-```
-GET /api/scripts?ids=a,b,c                # 다중 원본 조회
-
-응답 형식:
-[
-  {
-    "scriptId": "string",
-    "scriptText": "회의 내용...",
-    "storageUrl": "https://...",
-    "segments": [
-      {"speaker": "홍길동", "text": "안녕하세요"}
-    ]
-  }
-]
-```
-
----
 
 ## 🧪 테스트
 
-### 🖥️ **로컬 테스트**
-
-```bash
-# Gradio UI 테스트
-python test_ui.py
-
-# 브라우저에서 접속: http://localhost:7860
-```
 
 ### 🌐 **API 테스트**
 
@@ -498,6 +452,8 @@ curl https://your-app.azurewebsites.net/api/chat/status
 ```
 
 ---
+
+
 
 ## 🚨 트러블슈팅
 
@@ -581,6 +537,7 @@ az webapp log tail --name your-app --resource-group your-rg
 - **확장성**: 모듈 기반 구조로 기능 추가 용이
 
 ### 🔄 **버전 히스토리**
+- **v2.3.0**: 답변 생성 로직 간소화, 일관성 보장 강화
 - **v2.2.1**: API 엔드포인트 변경 (`/api/chat/*`)
 - **v2.2.0**: script_id 일관성 개선, 품질 평가 강화
 - **v2.1.0**: LangGraph 기반 리팩토링
@@ -590,11 +547,9 @@ az webapp log tail --name your-app --resource-group your-rg
 ### 🛠️ **기술 스택**
 - **웹 프레임워크**: FastAPI 0.104.1
 - **AI 오케스트레이션**: LangGraph 0.2.3
-- **LLM 통합**: LangChain 0.2.16
 - **AI 모델**: Azure OpenAI (GPT-4o-mini, text-embedding-ada-002)
 - **컨테이너화**: Docker (멀티스테이지 빌드)
 - **배포**: Azure Web App + GitHub Actions
-- **모니터링**: Azure Application Insights (선택사항)
 
 ### 🎯 **향후 개선사항**
 1. **캐싱 시스템**: Redis를 활용한 임베딩/응답 캐시
@@ -602,29 +557,4 @@ az webapp log tail --name your-app --resource-group your-rg
 3. **다국어 지원**: 영어/일본어 회의록 처리
 4. **고급 RAG**: 하이브리드 검색 (키워드 + 벡터)
 5. **사용자 피드백**: 답변 품질 학습 시스템
-
-### 🤝 **기여 가이드**
-1. **코드 스타일**: Black + isort 사용
-2. **테스트**: 새 기능 시 단위 테스트 필수
-3. **문서화**: docstring과 타입 힌트 작성
-4. **브랜치 전략**: feature/* → develop → main
-
----
-
-## 📞 지원 및 문의
-
-- **이슈 리포트**: [GitHub Issues](https://github.com/your-repo/issues)
-- **기능 요청**: [GitHub Discussions](https://github.com/your-repo/discussions)
-- **보안 문제**: security@your-domain.com
-
----
-
-<div align="center">
-
-**🚀 Made with ❤️ using FastAPI, LangChain & Azure OpenAI**
-
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-black.svg)](https://github.com/your-repo)
-[![Azure](https://img.shields.io/badge/Azure-Deployed-blue.svg)](https://your-app.azurewebsites.net)
-[![Docker](https://img.shields.io/badge/Docker-Hub-blue.svg)](https://hub.docker.com/r/your-username/chatbot-api)
-
-</div>
+6. **근거 문장 추출**: 답변에서 근거 문장 자동 분리 및 메타데이터 연결
