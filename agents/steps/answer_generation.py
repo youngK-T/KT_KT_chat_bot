@@ -124,22 +124,42 @@ class AnswerGenerator:
         return list(seen_scripts.values())
     
     def _calculate_confidence(self, relevant_chunks: List[Dict]) -> float:
-        """신뢰도 계산 개선 - 청크 개수와 품질 고려"""
+        """신뢰도 계산 개선 - 품질, 개수, 안정성 반영"""
         if not relevant_chunks:
-            return 0.1
+            return 0.1  # 관련 청크가 없으면 매우 낮음
         
-        # 청크 개수와 평균 관련도를 고려
         chunk_count = len(relevant_chunks)
-        top_chunks = relevant_chunks[:3]  # 상위 3개만 사용
+        top_chunks = relevant_chunks[:5]  # 상위 5개 사용 (조금 넓힘)
+        scores = [c.get("relevance_score", 0.0) for c in top_chunks]
+
+        # 1. 품질 (기본: 평균 점수)
+        avg_score = sum(scores) / len(scores)
+        max_score = max(scores)
         
-        avg_score = sum(chunk.get("relevance_score", 0.0) for chunk in top_chunks) / len(top_chunks)
+        # 2. 개수 효과 (개수가 많을수록 ↑, 단 최대 제한)
+        count_bonus = min(0.2, chunk_count * 0.04)  # 최대 0.2
         
-        # 청크 개수 보너스 (최대 0.2)
-        count_bonus = min(0.2, chunk_count * 0.05)
+        # 3. 안정성 (점수 분산으로 평가)
+        if len(scores) > 1:
+            variance = sum((s - avg_score) ** 2 for s in scores) / len(scores)
+            stability_factor = max(0.8, 1 - variance)  # 분산 클수록 불안정
+        else:
+            stability_factor = 1.0
         
-        # 최종 신뢰도 계산
-        raw_confidence = avg_score + count_bonus
-        confidence = max(0.3, min(1.0, raw_confidence))
+        # 4. 최종 신뢰도
+        raw_confidence = (avg_score * 0.7 + max_score * 0.3)  # 평균 위주 + 최고치 가중치
+        raw_confidence = raw_confidence * stability_factor + count_bonus
+        
+        # 보정 범위 (0.2 ~ 0.9 사이)
+        confidence = max(0.2, min(0.9, raw_confidence))
+        
+        logger.debug(
+            f"신뢰도 계산: avg={avg_score:.3f}, max={max_score:.3f}, "
+            f"variance={variance:.3f}, stability={stability_factor:.3f}, "
+            f"count_bonus={count_bonus:.3f}, raw={raw_confidence:.3f}, "
+            f"final={confidence:.3f}"
+        )
+        
         return confidence
     
     def _convert_quotes_to_evidence(self, quotes: List[Dict], relevant_chunks: List[Dict], original_scripts: List[Dict]) -> List[Dict]:
