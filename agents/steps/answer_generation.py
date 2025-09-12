@@ -138,7 +138,8 @@ class AnswerGenerator:
         count_bonus = min(0.2, chunk_count * 0.05)
         
         # 최종 신뢰도 계산
-        confidence = min(0.9, max(0.3, avg_score + count_bonus))
+        raw_confidence = avg_score + count_bonus
+        confidence = max(0.3, min(1.0, raw_confidence))
         return confidence
     
     def _convert_quotes_to_evidence(self, quotes: List[Dict], relevant_chunks: List[Dict], original_scripts: List[Dict]) -> List[Dict]:
