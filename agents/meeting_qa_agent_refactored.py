@@ -153,8 +153,8 @@ class MeetingQAAgent:
         # 답변 생성 또는 개선 중 콘텐츠 필터 감지 시
         if (state.get("content_filter_triggered", False) or 
             current_step in ["content_filter_in_answer", "content_filter_in_improvement"]):
-            logger.info("답변 생성/개선 중 콘텐츠 필터가 감지되어 프로세스를 종료합니다.")
-            return "content_filter"
+            logger.info("콘텐츠 필터가 감지되어 안전 응답을 반환합니다.")
+            return END  # ← END로 변경
         else:
             return "normal_flow"
     

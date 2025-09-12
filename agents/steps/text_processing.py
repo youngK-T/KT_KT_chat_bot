@@ -21,9 +21,14 @@ class TextProcessor:
         """5단계: 원본 스크립트 청킹 및 임베딩"""
         try:
             original_scripts = state.get("original_scripts", [])
-            
-            if not original_scripts:
-                raise ValueError("원본 스크립트가 없습니다.")
+
+            if not original_scripts:           
+                logger.warning("원본 스크립트가 없습니다. 빈 상태로 진행합니다.")
+                return {
+                    **state,
+                    "chunked_scripts": [],
+                    "current_step": "scripts_processed"
+                }
             
             all_chunked_scripts = []
             processed_script_ids = set()  # 중복 처리 방지
@@ -84,7 +89,12 @@ class TextProcessor:
             if not processed_question:
                 raise ValueError("질문 텍스트가 없습니다.")
             if not chunked_scripts:
-                raise ValueError("처리된 원본 청크가 없습니다.")
+                logger.warning("처리된 원본 청크가 없습니다. 빈 상태로 진행합니다.")
+                return {
+                    **state,
+                    "relevant_chunks": [],
+                    "current_step": "chunks_selected"
+                }
             
             # 질문 임베딩 생성
             query_embedding = self.embedding_manager.embed_query(processed_question)
