@@ -167,7 +167,7 @@ class AnswerGenerator:
         logger.debug(
             f"신뢰도 계산: raw_scores={raw_scores}, normalized_by={normalized_by}, scores={scores}, "
             f"avg={avg_score:.3f}, max={max_score:.3f}, variance={variance:.5f}, stability={stability:.3f}, "
-            f"base={base:.3f}, count_bonus={count_bonus:.3f}, final={comfidence:.3f}"
+            f"base={base:.3f}, count_bonus={count_bonus:.3f}, confidence={confidence:.3f}"
         )
 
         return confidence  
